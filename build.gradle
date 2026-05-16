@@ -1,0 +1,163 @@
+plugins {
+	id 'java-library'
+	id 'maven-publish'
+	id 'idea'
+	id 'net.neoforged.moddev' version '2.0.140'
+}
+
+tasks.named('wrapper', Wrapper).configure {
+	distributionType = Wrapper.DistributionType.BIN
+}
+
+def resolvedModVersion = mod_version.toString().endsWith("-SNAPSHOT")
+		? mod_version.toString().replace("-SNAPSHOT", "-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss").format(new Date()) + "-SNAPSHOT")
+		: mod_version.toString()
+version = "${minecraft_version}-${resolvedModVersion}"
+group = mod_group_id
+
+base {
+	archivesName = project.archives_base_name
+}
+
+java {
+	toolchain.languageVersion = JavaLanguageVersion.of(21)
+	withSourcesJar()
+}
+
+neoForge {
+	version = project.neo_version
+
+	parchment {
+		mappingsVersion = project.parchment_mappings_version
+		minecraftVersion = project.parchment_minecraft_version
+	}
+
+	runs {
+		configureEach {
+			systemProperty 'forge.logging.markers', 'REGISTRIES'
+			logLevel = org.slf4j.event.Level.DEBUG
+		}
+
+		client {
+			client()
+			systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+		}
+
+		server {
+			server()
+			programArgument '--nogui'
+			systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
+		}
+
+		data {
+			data()
+			programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+		}
+	}
+
+	mods {
+		"${mod_id}" {
+			sourceSet(sourceSets.main)
+		}
+	}
+}
+
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+configurations {
+	runtimeClasspath.extendsFrom localRuntime
+}
+
+repositories {
+	maven {
+		url = "https://maven.architectury.dev"
+		content {
+			includeGroup("dev.architectury")
+		}
+	}
+
+	maven {
+		url = "https://maven.createmod.net"
+	}
+
+	maven {
+		url = "https://maven.tterrag.com/"
+	}
+
+	maven {
+		url = "https://www.cursemaven.com"
+		content { includeGroup "curse.maven" }
+	}
+}
+
+dependencies {
+	compileOnly "dev.architectury:architectury-neoforge:${architectury_version}"
+	compileOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
+	compileOnly "net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1"
+	compileOnly "curse.maven:sable-1312371:8007005"
+	localRuntime "curse.maven:sable-1312371:8007005"
+	compileOnly fileTree(dir: 'libs', include: '*.jar')
+}
+
+tasks.withType(ProcessResources).configureEach {
+	var replaceProperties = [
+		version             : version,
+		mod_id              : mod_id,
+		mod_name            : mod_name,
+		mod_license         : mod_license,
+		mod_version         : mod_version,
+		mod_authors         : mod_authors,
+		mod_description     : mod_description,
+		mod_url             : mod_url,
+		pack_format         : pack_format,
+		minecraft_version   : minecraft_version,
+		minecraft_version_range: minecraft_version_range,
+		neo_version         : neo_version,
+		neo_version_range   : neo_version_range,
+		loader_version_range: loader_version_range
+	]
+
+	inputs.properties replaceProperties
+
+	filesMatching(['META-INF/neoforge.mods.toml', 'pack.mcmeta']) {
+		expand replaceProperties
+	}
+}
+
+tasks.withType(JavaCompile).configureEach {
+	options.encoding = 'UTF-8'
+	options.compilerArgs << '-Xlint:deprecation'
+}
+
+publishing {
+	publications {
+		register('mavenJava', MavenPublication) {
+			from components.java
+		}
+	}
+	repositories {
+		maven {
+			name = "BreakInBlocks"
+			url = version.toString().endsWith("-SNAPSHOT") ?
+					"https://maven.breakinblocks.com/snapshots" :
+					"https://maven.breakinblocks.com/releases"
+			credentials {
+				username = System.getenv("MAVEN_USER") ?: ""
+				password = System.getenv("MAVEN_TOKEN") ?: ""
+			}
+		}
+	}
+}
+
+tasks.register('publishMaven') {
+	description = 'Publishes the mod JAR and sources JAR to the BreakInBlocks Maven repository.'
+	group = 'publishing'
+	dependsOn 'publishMavenJavaPublicationToBreakInBlocksRepository'
+}
+
+idea {
+	module {
+		downloadSources = true
+		downloadJavadoc = true
+	}
+}

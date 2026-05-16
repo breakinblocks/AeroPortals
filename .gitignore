@@ -1,0 +1,49 @@
+# Gradle
+.gradle/
+build/
+
+# IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+out/
+
+# Eclipse
+.classpath
+.project
+.settings/
+.eclipse/
+bin/
+
+# VS Code
+.vscode/
+.history/
+
+# NeoForge dev runs
+run/
+run-data/
+run-server/
+run-gametest/
+run-client.log
+
+# Generated resources cache
+src/generated/resources/.cache
+
+# Logs
+logs/
+*.log
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Markdown — track only README, LICENSE, CHANGELOG (case-insensitive)
+*.md
+*.MD
+!README.md
+!README.MD
+!LICENSE.md
+!LICENSE.MD
+!CHANGELOG.md
+!CHANGELOG.MD
