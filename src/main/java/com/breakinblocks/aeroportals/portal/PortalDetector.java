@@ -1,14 +1,17 @@
 package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import com.breakinblocks.aeroportals.util.AabbUtil;
+import com.breakinblocks.aeroportals.util.PortalGeom;
+import com.breakinblocks.aeroportals.util.PortalRect;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
 import java.util.List;
@@ -38,16 +41,57 @@ public final class PortalDetector {
                 continue;
             }
 
-            BlockPos portalPos = findPortalBlock(level, aabb);
-            if (portalPos == null) continue;
+            PortalHit hit = findPortalBlock(level, aabb);
+            if (hit == null) continue;
 
-            AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps portal at {} in dim {}",
-                    sub.getUniqueId(), portalPos, level.dimension().location());
-            PortalTeleport.teleport(level, sub, portalPos);
+            switch (hit.kind()) {
+                case NETHER -> {
+                    PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos());
+                    if (srcRect == null) {
+                        AeroPortals.LOGGER.warn("[AeroPortals] nether portal block at {} but rect measurement failed; skipping",
+                                hit.pos());
+                        continue;
+                    }
+                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps nether portal at {} (axis={} {}x{}) in dim {}",
+                            sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
+                            level.dimension().location());
+                    PortalTeleport.teleport(level, sub, srcRect);
+                }
+                case END -> {
+                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps end portal at {} in dim {}",
+                            sub.getUniqueId(), hit.pos(), level.dimension().location());
+                    PortalTeleport.teleportEnd(level, sub, hit.pos());
+                }
+                case ARS_NOUVEAU -> {
+                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps ars-nouveau portal at {} in dim {}",
+                            sub.getUniqueId(), hit.pos(), level.dimension().location());
+                    PortalTeleport.teleportArsNouveau(level, sub, hit.pos());
+                }
+                case AETHER -> {
+                    PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
+                            AetherCompat.portalBlock());
+                    if (srcRect == null) {
+                        AeroPortals.LOGGER.warn("[AeroPortals] aether portal block at {} but rect measurement failed; skipping",
+                                hit.pos());
+                        continue;
+                    }
+                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps aether portal at {} (axis={} {}x{}) in dim {}",
+                            sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
+                            level.dimension().location());
+                    PortalTeleport.teleportAether(level, sub, srcRect);
+                }
+                case DRACONIC -> {
+                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps draconic portal at {} in dim {}",
+                            sub.getUniqueId(), hit.pos(), level.dimension().location());
+                    PortalTeleport.teleportDraconic(level, sub, hit.pos());
+                }
+            }
         }
     }
 
-    private static BlockPos findPortalBlock(ServerLevel level, AABB aabb) {
+    private record PortalHit(BlockPos pos, PortalKind kind) {}
+
+    private static PortalHit findPortalBlock(ServerLevel level, AABB aabb) {
         int x0 = (int) Math.floor(aabb.minX);
         int y0 = (int) Math.floor(aabb.minY);
         int z0 = (int) Math.floor(aabb.minZ);
@@ -61,9 +105,9 @@ public final class PortalDetector {
                 for (int z = z0; z <= z1; z++) {
                     cursor.set(x, y, z);
                     if (!level.isLoaded(cursor)) continue;
-                    if (level.getBlockState(cursor).is(Blocks.NETHER_PORTAL)) {
-                        return cursor.immutable();
-                    }
+                    BlockState state = level.getBlockState(cursor);
+                    PortalKind kind = PortalKind.ofBlock(state);
+                    if (kind != null) return new PortalHit(cursor.immutable(), kind);
                 }
             }
         }

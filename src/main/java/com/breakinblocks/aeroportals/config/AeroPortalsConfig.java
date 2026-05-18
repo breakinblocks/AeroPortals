@@ -9,6 +9,8 @@ public final class AeroPortalsConfig {
     public static final ModConfigSpec.IntValue PORTAL_COOLDOWN_TICKS;
     public static final ModConfigSpec.IntValue SCAN_INTERVAL_TICKS;
     public static final ModConfigSpec.DoubleValue MAX_SUBLEVEL_AABB_VOLUME;
+    public static final ModConfigSpec.IntValue DEST_PORTAL_SEARCH_RADIUS;
+    public static final ModConfigSpec.BooleanValue GENERATE_MATCHING_PORTAL;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -29,6 +31,12 @@ public final class AeroPortalsConfig {
         PORTAL_COOLDOWN_TICKS = builder
                 .comment("Ticks after a teleport during which the same SubLevel will not be teleported again (anti-bounce).")
                 .defineInRange("portal_cooldown_ticks", 200, 0, 24000);
+        DEST_PORTAL_SEARCH_RADIUS = builder
+                .comment("Horizontal block radius around the scaled destination point to search for an existing nether portal to link to.")
+                .defineInRange("dest_portal_search_radius", 128, 0, 1024);
+        GENERATE_MATCHING_PORTAL = builder
+                .comment("If true, generate a portal frame at the destination (matching source dimensions) when no existing portal is found or the existing one is too small.")
+                .define("generate_matching_portal", true);
         builder.pop();
 
         SPEC = builder.build();

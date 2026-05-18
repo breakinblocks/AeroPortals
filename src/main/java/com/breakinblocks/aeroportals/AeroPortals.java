@@ -29,7 +29,7 @@ public class AeroPortals {
             sableLoaded = ModList.get().isLoaded("sable");
             LOGGER.info("[AeroPortals] common setup: sable loaded={}", sableLoaded);
             if (!sableLoaded) {
-                LOGGER.warn("[AeroPortals] Sable mod not detected — AeroPortals will be dormant. Loaded mod ids:");
+                LOGGER.warn("[AeroPortals] Sable mod not detected - AeroPortals will be dormant. Loaded mod ids:");
                 ModList.get().getMods().forEach(m -> LOGGER.warn("[AeroPortals]   - {}", m.getModId()));
             }
         });
