@@ -71,8 +71,7 @@ public final class SableBridge {
         return loaded;
     }
 
-    // Replays each loaded block through the physics system; fullyLoad's bulk write bypasses the
-    // per-block change event, leaving the MassTracker empty and the sub gets auto-removed next tick.
+    // Without this replay the MassTracker stays empty after fullyLoad and the sub is auto-removed next tick.
     private static void rebuildPhysicsData(ServerLevel level, ServerSubLevel sub, ServerSubLevelContainer dstContainer) {
         BoundingBox3ic bounds = sub.getPlot().getBoundingBox();
         if (bounds == BoundingBox3i.EMPTY) {
