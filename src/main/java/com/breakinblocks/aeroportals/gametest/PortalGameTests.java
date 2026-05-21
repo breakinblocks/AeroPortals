@@ -6,6 +6,7 @@ import com.breakinblocks.aeroportals.events.VanillaPortalCanceller;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
+import com.breakinblocks.aeroportals.compat.TelepastriesCompat;
 import com.breakinblocks.aeroportals.compat.TropicraftCompat;
 import com.breakinblocks.aeroportals.portal.EndPortalLanding;
 import com.breakinblocks.aeroportals.portal.PortalCooldown;
@@ -1649,6 +1650,49 @@ public class PortalGameTests {
         }
         helper.succeed();
     }
+
+    @GameTest(template = EMPTY)
+    public static void telepastriesCompat_noOpsCleanlyWhenAbsent(GameTestHelper helper) {
+        boolean available = TelepastriesCompat.isAvailable();
+        AeroPortals.LOGGER.info("[AeroPortals/test] TelePastries compat isAvailable={} (TelePastries loaded in this run: {})",
+                available, ModList.get().isLoaded(TelepastriesCompat.MOD_ID));
+
+        if (TelepastriesCompat.isTeleCake(Blocks.STONE.defaultBlockState())) {
+            helper.fail("isTeleCake should be false for STONE");
+            return;
+        }
+        if (TelepastriesCompat.isTeleCake(Blocks.CAKE.defaultBlockState())) {
+            helper.fail("isTeleCake should be false for vanilla CAKE");
+            return;
+        }
+        if (TelepastriesCompat.getCakeDestination(Blocks.STONE.defaultBlockState()) != null) {
+            helper.fail("getCakeDestination should be null for STONE");
+            return;
+        }
+
+        if (available) {
+            BlockPos local = new BlockPos(7, 4, 7);
+            BlockPos worldPos = helper.absolutePos(local);
+            Block netherCake = BuiltInRegistries.BLOCK.get(ResourceLocation.fromNamespaceAndPath(TelepastriesCompat.MOD_ID, "nether_cake"));
+            if (netherCake == Blocks.AIR) {
+                helper.fail("nether_cake block missing from registry despite telepastries being loaded");
+                return;
+            }
+            helper.setBlock(local, netherCake.defaultBlockState());
+            BlockState placed = helper.getLevel().getBlockState(worldPos);
+            if (!TelepastriesCompat.isTeleCake(placed)) {
+                helper.fail("isTeleCake should return true for placed telepastries nether_cake");
+                return;
+            }
+            ResourceKey<Level> dest = TelepastriesCompat.getCakeDestination(placed);
+            if (dest == null || !dest.equals(Level.NETHER)) {
+                helper.fail("nether_cake getCakeDestination should be Level.NETHER, got " + dest);
+                return;
+            }
+        }
+        helper.succeed();
+    }
+
     @GameTest(template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_pinaColadaOnSubLevel_teleportsToTropics(GameTestHelper helper) {
         if (!TropicraftCompat.isAvailable()) {

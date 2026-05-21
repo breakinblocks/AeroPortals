@@ -2,7 +2,7 @@
 
 Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/create-aeronautics) airship through a portal and the whole ship goes with you. Players, passengers, decorations, and item frames travel together. AeroPortals is the bridge between Create's airships ([Sable](https://www.curseforge.com/minecraft/mc-mods/sable) physics) and Minecraft's portal system.
 
-> Status: proof of concept. The core flow works end-to-end and is covered by 34 automated tests, but expect rough edges. See [Known limitations](#known-limitations).
+> Status: public beta. The core flow works end-to-end and is covered by 39 automated tests, but expect rough edges. See [Known limitations](#known-limitations).
 
 ## Warning
 
@@ -10,9 +10,11 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 ## What it does
 
-- **Nether portals** Fly your airship into a nether portal and you and the ship arrive on the other side. Wide ship? Build a wide portal. AeroPortals matches the source portal's dimensions at the destination, generates one if needed, and clears a safe landing area so you don't end up entombed in a wall of basalt.
+- **Nether portals** Fly your airship into a nether portal and you and the ship arrive on the other side. Wide ship? Build a wide portal. AeroPortals matches the source portal's dimensions at the destination and generates one if needed. The linking portal is always placed inside the playable layer of the Nether, never on top of the bedrock roof, even if your source portal was at a high Y in the Overworld.
 
-- **End portals** Sail onto an end portal and the ship lands on the obsidian platform in the End. If the platform was destroyed (or you're in a custom End) AeroPortals rebuilds it before you arrive. Travelling back from the End drops you near world spawn.
+- **End portals** Sail onto an end portal and the ship lands at the vanilla End spawn point. The 5x5 obsidian spawn pad is rebuilt if missing. Travelling back from the End drops you near world spawn.
+
+- **Non-destructive landings** If your destination is blocked by terrain or builds, AeroPortals will tell you in chat which block is in the way and cancel the teleport. Your ship stays where it is, and the destination side is never modified. Clear the space and try again.
 
 - **Aether portals** (when [The Aether](https://www.curseforge.com/minecraft/mc-mods/aether) is installed). Same idea as nether portals but with glowstone frames and the Aether dimension.
 
@@ -21,6 +23,8 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 - **Draconic Evolution portals** (when [Draconic Evolution](https://www.curseforge.com/minecraft/mc-mods/draconic-evolution) is installed). Build a Dislocator Receptacle portal with a configured Dislocator and fly your ship through. The ship lands on the receptacle's stored target.
 
 - **Pina colada teleport** (when [Tropicraft](https://www.curseforge.com/minecraft/mc-mods/tropicraft) is installed). Drink a pina colada while sailing your airship and you and the ship travel to the Tropics. Drink another in the Tropics to come home.
+
+- **TelePastries cakes** (when [TelePastries](https://www.curseforge.com/minecraft/mc-mods/telepastries) is installed). Right-click any TelePastries cake (Overworld, Nether, End, Twilight, Lost City, or the three configurable custom cakes) while on your airship and the ship travels to that cake's dimension with you.
 
 ## Who comes with you
 

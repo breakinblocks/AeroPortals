@@ -38,12 +38,12 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Markdown — track only README, LICENSE, CHANGELOG (case-insensitive)
+# Markdown — track only README, LICENSE, and metadata/changelogs/*.md (case-insensitive)
 *.md
 *.MD
 !README.md
 !README.MD
 !LICENSE.md
 !LICENSE.MD
-!CHANGELOG.md
-!CHANGELOG.MD
+!metadata/changelogs/*.md
+!metadata/changelogs/*.MD
