@@ -20,9 +20,11 @@ import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.SectionPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -46,6 +48,7 @@ import org.joml.Vector3dc;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -84,6 +87,7 @@ public final class PortalTeleport {
 
         Vec3 scaledPortalCenter = clampToWorldBorder(dstLevel,
                 new Vec3(srcPortalCenter.x * ratio, srcPortalCenter.y, srcPortalCenter.z * ratio));
+        scaledPortalCenter = clampPortalCenterY(dstLevel, scaledPortalCenter, srcRect.height());
 
         BlockPos searchCenter = BlockPos.containing(scaledPortalCenter);
         ensureChunksLoaded(dstLevel, searchCenter);
@@ -103,7 +107,7 @@ public final class PortalTeleport {
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, resolved.generated(), "nether");
+        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "nether");
     }
 
     public static void teleportEnd(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
@@ -162,6 +166,7 @@ public final class PortalTeleport {
 
         Vec3 scaledPortalCenter = clampToWorldBorder(dstLevel,
                 new Vec3(srcPortalCenter.x * ratio, srcPortalCenter.y, srcPortalCenter.z * ratio));
+        scaledPortalCenter = clampPortalCenterY(dstLevel, scaledPortalCenter, srcRect.height());
 
         BlockPos searchCenter = BlockPos.containing(scaledPortalCenter);
         ensureChunksLoaded(dstLevel, searchCenter);
@@ -292,9 +297,9 @@ public final class PortalTeleport {
             ServerSubLevel sub,
             ServerLevel dstLevel,
             Vec3 dstWorld,
-            boolean clearLanding,
+            boolean validateLanding,
             String contextLabel) {
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, clearLanding, contextLabel);
+        executeChainMove(srcLevel, sub, dstLevel, dstWorld, validateLanding, contextLabel);
     }
 
     private static void executeChainMove(
@@ -302,7 +307,7 @@ public final class PortalTeleport {
             ServerSubLevel sub,
             ServerLevel dstLevel,
             Vec3 dstWorld,
-            boolean clearLanding,
+            boolean validateLanding,
             String contextLabel) {
         MinecraftServer server = srcLevel.getServer();
         Vec3 srcWorld = subWorldPos(sub.logicalPose());
@@ -329,21 +334,36 @@ public final class PortalTeleport {
                     chain.stream().map(s -> s.getUniqueId() + "@" + subWorldPos(s.logicalPose())).toList());
         }
 
-        List<SubMovePlan> plans = new ArrayList<>(chain.size());
+        List<PendingMove> pending = new ArrayList<>(chain.size());
         for (ServerSubLevel chainedSub : chain) {
             if (chainedSub.isRemoved()) continue;
             Vec3 chainedSrcPos = subWorldPos(chainedSub.logicalPose());
             Vec3 chainedDstPos = clampToWorldBorder(dstLevel, chainedSrcPos.add(translation));
+            pending.add(new PendingMove(chainedSub, chainedSrcPos, chainedDstPos));
+        }
 
-            List<RiderBinding> chainRiders = captureRiders(srcLevel, chainedSub);
-            List<EntityRiderBinding> chainEntities = captureEntityRiders(srcLevel, chainedSub);
-            AeroPortals.LOGGER.info("[AeroPortals] sub {} in chain: captured {} player(s), {} entity rider(s); dst={}",
-                    chainedSub.getUniqueId(), chainRiders.size(), chainEntities.size(), chainedDstPos);
-
-            if (clearLanding) {
-                clearLandingSpace(dstLevel, chainedSub, chainedSrcPos, chainedDstPos);
+        if (validateLanding) {
+            for (PendingMove pm : pending) {
+                Optional<BlockPos> blocker = validateLandingSpace(dstLevel, pm.sub, pm.srcPos, pm.dstPos);
+                if (blocker.isPresent()) {
+                    BlockPos blockerPos = blocker.get();
+                    BlockState blockerState = dstLevel.getBlockState(blockerPos);
+                    AeroPortals.LOGGER.warn("[AeroPortals] {} teleport aborted: landing for sub {} blocked at {} by {} (dstAabb origin {})",
+                            contextLabel, pm.sub.getUniqueId(), blockerPos,
+                            blockerState.getBlock(), pm.dstPos);
+                    messageAbort(srcLevel, dstLevel, chain, blockerPos, blockerState);
+                    return;
+                }
             }
-            plans.add(new SubMovePlan(chainedSub, chainedSrcPos, chainedDstPos, chainRiders, chainEntities));
+        }
+
+        List<SubMovePlan> plans = new ArrayList<>(pending.size());
+        for (PendingMove pm : pending) {
+            List<RiderBinding> chainRiders = captureRiders(srcLevel, pm.sub);
+            List<EntityRiderBinding> chainEntities = captureEntityRiders(srcLevel, pm.sub);
+            AeroPortals.LOGGER.info("[AeroPortals] sub {} in chain: captured {} player(s), {} entity rider(s); dst={}",
+                    pm.sub.getUniqueId(), chainRiders.size(), chainEntities.size(), pm.dstPos);
+            plans.add(new SubMovePlan(pm.sub, pm.srcPos, pm.dstPos, chainRiders, chainEntities));
         }
 
         Map<SubMovePlan, ServerSubLevel> moved = new IdentityHashMap<>();
@@ -388,6 +408,8 @@ public final class PortalTeleport {
         AeroPortals.LOGGER.info("[AeroPortals] {} teleport complete; moved {}/{} sub(s) from chain",
                 contextLabel, moved.size(), plans.size());
     }
+
+    private record PendingMove(ServerSubLevel sub, Vec3 srcPos, Vec3 dstPos) {}
 
     private record SubMovePlan(
             ServerSubLevel srcSub,
@@ -479,50 +501,78 @@ public final class PortalTeleport {
         return new BlockPos(searchCenter.getX(), searchCenter.getY() - halfH, searchCenter.getZ() - halfW);
     }
 
-    private static void clearLandingSpace(ServerLevel dstLevel, ServerSubLevel sub, Vec3 srcWorld, Vec3 dstWorld) {
+    private static Optional<BlockPos> validateLandingSpace(ServerLevel dstLevel, ServerSubLevel sub, Vec3 srcWorld, Vec3 dstWorld) {
         AABB srcAabb = AabbUtil.worldAabb(sub);
         Vec3 translation = dstWorld.subtract(srcWorld);
-        AABB dstAabb = srcAabb.move(translation).inflate(1.5);
+        AABB dstAabb = srcAabb.move(translation);
 
         int x0 = (int) Math.floor(dstAabb.minX);
         int y0 = (int) Math.floor(dstAabb.minY);
         int z0 = (int) Math.floor(dstAabb.minZ);
-        int x1 = (int) Math.floor(dstAabb.maxX);
-        int y1 = (int) Math.floor(dstAabb.maxY);
-        int z1 = (int) Math.floor(dstAabb.maxZ);
+        int x1 = (int) Math.floor(dstAabb.maxX - 1.0e-6);
+        int y1 = (int) Math.floor(dstAabb.maxY - 1.0e-6);
+        int z1 = (int) Math.floor(dstAabb.maxZ - 1.0e-6);
 
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        BlockState air = Blocks.AIR.defaultBlockState();
-        int cleared = 0;
-        for (int x = x0; x <= x1; x++) {
-            for (int y = y0; y <= y1; y++) {
+        for (int y = y0; y <= y1; y++) {
+            for (int x = x0; x <= x1; x++) {
                 for (int z = z0; z <= z1; z++) {
                     cursor.set(x, y, z);
                     BlockState s = dstLevel.getBlockState(cursor);
                     if (s.isAir()) continue;
-                    if (s.is(Blocks.NETHER_PORTAL) || s.is(Blocks.OBSIDIAN) || s.is(Blocks.BEDROCK)) continue;
-                    dstLevel.setBlock(cursor, air, 3);
-                    cleared++;
+                    if (s.canBeReplaced()) continue;
+                    if (!s.getFluidState().isEmpty()) continue;
+                    if (s.is(Blocks.NETHER_PORTAL) || s.is(Blocks.END_PORTAL) || s.is(Blocks.END_GATEWAY)) continue;
+                    return Optional.of(cursor.immutable());
                 }
             }
         }
-        BlockState obsidian = Blocks.OBSIDIAN.defaultBlockState();
-        int platformY = y0 - 1;
-        int platformBlocks = 0;
-        for (int x = x0; x <= x1; x++) {
-            for (int z = z0; z <= z1; z++) {
-                cursor.set(x, platformY, z);
-                BlockState below = dstLevel.getBlockState(cursor);
-                if (below.is(Blocks.NETHER_PORTAL) || below.is(Blocks.OBSIDIAN) || below.is(Blocks.BEDROCK)) continue;
-                if (!below.isAir() && !below.is(Blocks.LAVA) && !below.is(Blocks.WATER) && !below.is(Blocks.FIRE)) continue;
-                dstLevel.setBlock(cursor, obsidian, 3);
-                platformBlocks++;
+        return Optional.empty();
+    }
+
+    private static Vec3 clampPortalCenterY(ServerLevel dstLevel, Vec3 portalCenter, int portalHeight) {
+        DimensionType dim = dstLevel.dimensionType();
+        int dimMinY = dim.minY();
+        int playableMaxY = dimMinY + dim.logicalHeight() - 1;
+        boolean hasRoofBedrock = dstLevel.dimension().equals(Level.NETHER);
+        int floorBuffer = hasRoofBedrock ? 6 : 1;
+        int roofBuffer = hasRoofBedrock ? (5 + Math.max(1, portalHeight)) : 1;
+        int safeMinY = dimMinY + floorBuffer;
+        int safeMaxY = playableMaxY - roofBuffer;
+        if (safeMaxY < safeMinY) safeMaxY = safeMinY;
+        double clampedY = Math.max(safeMinY, Math.min(safeMaxY, portalCenter.y));
+        if (clampedY != portalCenter.y) {
+            AeroPortals.LOGGER.info("[AeroPortals] clamped destination portal centre Y in {} from {} to {} (safe range [{}, {}])",
+                    dstLevel.dimension().location(), portalCenter.y, clampedY, safeMinY, safeMaxY);
+        }
+        return new Vec3(portalCenter.x, clampedY, portalCenter.z);
+    }
+
+    private static Set<ServerPlayer> ridersOfChain(ServerLevel srcLevel, Collection<ServerSubLevel> chain) {
+        Set<ServerPlayer> result = new HashSet<>();
+        Set<ServerSubLevel> chainSet = Collections.newSetFromMap(new IdentityHashMap<>());
+        chainSet.addAll(chain);
+        for (ServerPlayer p : srcLevel.players()) {
+            SubLevel tracking = Sable.HELPER.getTrackingSubLevel(p);
+            if (tracking instanceof ServerSubLevel s && chainSet.contains(s)) {
+                result.add(p);
             }
         }
+        return result;
+    }
 
-        if (cleared > 0 || platformBlocks > 0) {
-            AeroPortals.LOGGER.info("[AeroPortals] cleared {} block(s), placed {} platform block(s) below landing AABB {}",
-                    cleared, platformBlocks, dstAabb);
+    private static void messageAbort(ServerLevel srcLevel, ServerLevel dstLevel, Collection<ServerSubLevel> chain,
+                                     BlockPos blockerPos, BlockState blockerState) {
+        String blockName = blockerState.getBlock().getName().getString();
+        Component msg = Component.literal(
+                "AeroPortals: teleport cancelled - landing in " + dstLevel.dimension().location()
+                        + " is blocked by " + blockName
+                        + " at " + blockerPos.getX() + ", " + blockerPos.getY() + ", " + blockerPos.getZ()
+                        + ". Clear that area on the destination side and try again.")
+                .withStyle(ChatFormatting.YELLOW);
+        Set<ServerPlayer> riders = ridersOfChain(srcLevel, chain);
+        for (ServerPlayer p : riders) {
+            p.sendSystemMessage(msg);
         }
     }
 
