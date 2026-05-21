@@ -4,6 +4,10 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 > Status: proof of concept. The core flow works end-to-end and is covered by 34 automated tests, but expect rough edges. See [Known limitations](#known-limitations).
 
+## Warning
+
+[Sable](https://www.curseforge.com/minecraft/mc-mods/sable) is a deeply intrusive physics mod and stability is never guaranteed. **Always back up your worlds before flying through portals.** If something goes wrong, please report it on our [issue tracker](https://github.com/breakinblocks/AeroPortals/issues) with logs and a reproduction case. We will do our best to accommodate new feature requests alongside bug fix updates.
+
 ## What it does
 
 - **Nether portals** Fly your airship into a nether portal and you and the ship arrive on the other side. Wide ship? Build a wide portal. AeroPortals matches the source portal's dimensions at the destination, generates one if needed, and clears a safe landing area so you don't end up entombed in a wall of basalt.

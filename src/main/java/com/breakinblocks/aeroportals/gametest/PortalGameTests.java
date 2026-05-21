@@ -1393,11 +1393,11 @@ public class PortalGameTests {
 
     @GameTest(template = EMPTY, timeoutTicks = 200)
     public static void command_teleportToDimension_movesSubToTargetDim(GameTestHelper helper) {
-        
-        
-        
-        
-        
+
+
+
+
+
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
@@ -1423,6 +1423,7 @@ public class PortalGameTests {
                     subUuidRef[0] = sub.getUniqueId();
 
                     Vec3 dstWorld = new Vec3(worldPos.getX() / 8.0 + 0.5, 64.5, worldPos.getZ() / 8.0 + 0.5);
+                    clearNetherCube(dstLevel, BlockPos.containing(dstWorld), 3);
                     PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld,
                             true, "test:command");
                 })
@@ -1453,6 +1454,145 @@ public class PortalGameTests {
                 })
                 .thenSucceed();
     }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void teleport_abortsWhenLandingBlockedByNetherrack(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        if (srcContainer == null) { helper.fail("srcContainer"); return; }
+
+        UUID[] subUuidRef = new UUID[1];
+        TransferEventRecorder.reset();
+        NeoForge.EVENT_BUS.register(TransferEventRecorder.class);
+
+        final int dstX = 12345;
+        final int dstY = 64;
+        final int dstZ = 12345;
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    subUuidRef[0] = sub.getUniqueId();
+
+                    fillNetherCube(dstLevel, new BlockPos(dstX, dstY, dstZ), 3, Blocks.NETHERRACK.defaultBlockState());
+
+                    Vec3 dstWorld = new Vec3(dstX + 0.5, dstY + 0.5, dstZ + 0.5);
+                    PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld,
+                            true, "test:abort_when_blocked");
+                })
+                .thenIdle(2)
+                .thenExecute(() -> {
+                    try {
+                        UUID id = subUuidRef[0];
+                        boolean inSrc = srcContainer.getSubLevel(id) != null;
+                        TransferEventRecorder.Captured captured = TransferEventRecorder.captured.get(id);
+                        AeroPortals.LOGGER.info("[AeroPortals/test] abort-when-blocked: inSrc={} eventFired={}",
+                                inSrc, captured != null);
+                        if (!inSrc) {
+                            helper.fail("sub should remain in src dim when teleport is aborted by blocked landing");
+                            return;
+                        }
+                        if (captured != null) {
+                            helper.fail("SubLevelTransferEvent must not fire when teleport is aborted");
+                            return;
+                        }
+                    } finally {
+                        NeoForge.EVENT_BUS.unregister(TransferEventRecorder.class);
+                    }
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void teleport_succeedsWhenLandingClearedFirst(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        if (srcContainer == null) { helper.fail("srcContainer"); return; }
+
+        UUID[] subUuidRef = new UUID[1];
+        TransferEventRecorder.reset();
+        NeoForge.EVENT_BUS.register(TransferEventRecorder.class);
+
+        final int dstX = 12400;
+        final int dstY = 64;
+        final int dstZ = 12400;
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    subUuidRef[0] = sub.getUniqueId();
+
+                    clearNetherCube(dstLevel, new BlockPos(dstX, dstY, dstZ), 3);
+
+                    Vec3 dstWorld = new Vec3(dstX + 0.5, dstY + 0.5, dstZ + 0.5);
+                    PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld,
+                            true, "test:success_when_cleared");
+                })
+                .thenIdle(2)
+                .thenExecute(() -> {
+                    try {
+                        UUID id = subUuidRef[0];
+                        boolean inSrc = srcContainer.getSubLevel(id) != null;
+                        TransferEventRecorder.Captured captured = TransferEventRecorder.captured.get(id);
+                        AeroPortals.LOGGER.info("[AeroPortals/test] success-when-cleared: inSrc={} eventFired={}",
+                                inSrc, captured != null);
+                        if (inSrc) {
+                            helper.fail("sub should be removed from src dim after successful teleport into cleared space");
+                            return;
+                        }
+                        if (captured == null) {
+                            helper.fail("SubLevelTransferEvent did not fire for cleared-space teleport");
+                            return;
+                        }
+                        if (captured.dst() != dstLevel) {
+                            helper.fail("event dst mismatch: " + captured.dst());
+                            return;
+                        }
+                    } finally {
+                        NeoForge.EVENT_BUS.unregister(TransferEventRecorder.class);
+                    }
+                })
+                .thenSucceed();
+    }
+
+    private static void fillNetherCube(ServerLevel level, BlockPos centre, int radius, BlockState state) {
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dy = -radius; dy <= radius; dy++) {
+                for (int dz = -radius; dz <= radius; dz++) {
+                    cursor.set(centre.getX() + dx, centre.getY() + dy, centre.getZ() + dz);
+                    level.setBlock(cursor, state, 3);
+                }
+            }
+        }
+    }
+
+    private static void clearNetherCube(ServerLevel level, BlockPos centre, int radius) {
+        fillNetherCube(level, centre, radius, Blocks.AIR.defaultBlockState());
+    }
+
     @GameTest(template = EMPTY)
     public static void draconicEvolutionCompat_noOpsCleanlyWhenAbsent(GameTestHelper helper) {
         boolean available = DraconicEvolutionCompat.isAvailable();
