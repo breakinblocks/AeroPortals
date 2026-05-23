@@ -22,6 +22,8 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 - **Draconic Evolution portals** (when [Draconic Evolution](https://www.curseforge.com/minecraft/mc-mods/draconic-evolution) is installed). Build a Dislocator Receptacle portal with a configured Dislocator and fly your ship through. The ship lands on the receptacle's stored target.
 
+- **Deeper and Darker portals** (when [Deeper and Darker](https://www.curseforge.com/minecraft/mc-mods/deeperdarker) is installed). Same idea as nether portals but with reinforced deepslate frames, leading to The Otherside.
+
 - **Pina colada teleport** (when [Tropicraft](https://www.curseforge.com/minecraft/mc-mods/tropicraft) is installed). Drink a pina colada while sailing your airship and you and the ship travel to the Tropics. Drink another in the Tropics to come home.
 
 - **TelePastries cakes** (when [TelePastries](https://www.curseforge.com/minecraft/mc-mods/telepastries) is installed). Right-click any TelePastries cake (Overworld, Nether, End, Twilight, Lost City, or the three configurable custom cakes) while on your airship and the ship travels to that cake's dimension with you.
@@ -66,6 +68,7 @@ OP-level command (permission level 2). Teleports you and the airship you're ridi
 - `overworld`, `nether`, `end` always
 - `aether` when Aether is installed
 - `tropicraft` when Tropicraft is installed
+- `otherside` when Deeper and Darker is installed
 - You can also type any custom dimension as `namespace:path` directly
 
 The ship lands at a sensible spot in the destination: the obsidian platform for the End, somewhere safe above the surface for everything else.
@@ -84,6 +87,7 @@ The ship lands at a sensible spot in the destination: the obsidian platform for 
 | [Ars Nouveau](https://www.curseforge.com/minecraft/mc-mods/ars-nouveau) | 5.11+ | optional |
 | [Tropicraft](https://www.curseforge.com/minecraft/mc-mods/tropicraft) | 9.8+ | optional |
 | [Draconic Evolution](https://www.curseforge.com/minecraft/mc-mods/draconic-evolution) | 3.1+ | optional |
+| [Deeper and Darker](https://www.curseforge.com/minecraft/mc-mods/deeperdarker) | 1.3+ | optional |
 
 If an optional mod isn't installed, that integration is simply inactive: no errors, no warnings, no overhead.
 
@@ -107,7 +111,7 @@ AeroPortals writes the ship snapshot to disk before moving it. If the server cra
 ## Known limitations
 
 - **Ropes and joints don't survive teleport.** Ships connected by Sable rope/docking links travel together and stay in formation, but the physical connection itself breaks. Re-tie the rope or re-dock at the destination.
-- **Other modded portal types aren't auto-supported.** Twilight Forest, Mystcraft, etc. aren't recognized. Vanilla nether/end, plus Aether, Ars Nouveau, Tropicraft, and Draconic Evolution are the supported portals today.
+- **Other modded portal types aren't auto-supported.** Twilight Forest, Mystcraft, etc. aren't recognized. Vanilla nether/end, plus Aether, Ars Nouveau, Tropicraft, Draconic Evolution, and Deeper and Darker are the supported portals today.
 - **Speed slightly drops per teleport.** Each portal trip costs about 10% of your velocity (Sable's reload setting). Tune `sub_level_velocity_retained_on_load` in Sable's config if you want full preservation.
 
 ## Want support for another portal or dimension?

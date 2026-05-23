@@ -2,6 +2,7 @@ package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
+import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import com.breakinblocks.aeroportals.util.PortalGeom;
@@ -84,6 +85,19 @@ public final class PortalDetector {
                     AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps draconic portal at {} in dim {}",
                             sub.getUniqueId(), hit.pos(), level.dimension().location());
                     PortalTeleport.teleportDraconic(level, sub, hit.pos());
+                }
+                case DEEPER_DARKER -> {
+                    PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
+                            DeeperAndDarkerCompat.portalBlock());
+                    if (srcRect == null) {
+                        AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker portal block at {} but rect measurement failed; skipping",
+                                hit.pos());
+                        continue;
+                    }
+                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps deeperdarker portal at {} (axis={} {}x{}) in dim {}",
+                            sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
+                            level.dimension().location());
+                    PortalTeleport.teleportDeeperDarker(level, sub, srcRect);
                 }
             }
         }

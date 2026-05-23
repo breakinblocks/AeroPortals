@@ -2,6 +2,7 @@ package com.breakinblocks.aeroportals.commands;
 
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
+import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.compat.TropicraftCompat;
 import com.breakinblocks.aeroportals.portal.EndPortalLanding;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
@@ -75,6 +76,7 @@ public final class AeroPortalsCommands {
         dests.add("end");
         if (AetherCompat.isAvailable()) dests.add("aether");
         if (TropicraftCompat.isAvailable()) dests.add("tropicraft");
+        if (DeeperAndDarkerCompat.isAvailable()) dests.add("otherside");
         return dests.toArray(new String[0]);
     }
 
@@ -134,6 +136,7 @@ public final class AeroPortalsCommands {
             case "end", "the_end" -> Level.END;
             case "aether" -> AetherCompat.isAvailable() ? AetherCompat.destinationDimension() : null;
             case "tropicraft", "tropics" -> TropicraftCompat.isAvailable() ? TropicraftCompat.tropicsDimension() : null;
+            case "otherside", "deeperdarker" -> DeeperAndDarkerCompat.isAvailable() ? DeeperAndDarkerCompat.destinationDimension() : null;
             default -> {
                 try {
                     ResourceLocation rl = ResourceLocation.parse(arg);

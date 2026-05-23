@@ -4,6 +4,7 @@ import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.api.SubLevelTransferEvent;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
+import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import com.breakinblocks.aeroportals.util.AabbUtil;
@@ -226,6 +227,94 @@ public final class PortalTeleport {
         PortalRect generated = PortalBuilder.build(
                 dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height(),
                 Blocks.GLOWSTONE, portalState);
+        return new DestinationResolution(generated, true);
+    }
+
+    public static void teleportDeeperDarker(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
+        MinecraftServer server = srcLevel.getServer();
+        ResourceKey<Level> destKey = DeeperAndDarkerCompat.destinationDimension();
+        ResourceKey<Level> returnKey = DeeperAndDarkerCompat.returnDimension();
+        if (destKey == null || returnKey == null) {
+            AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker teleport: compat returned null dimension keys; aborting");
+            return;
+        }
+        ResourceKey<Level> dstKey = srcLevel.dimension().equals(destKey) ? returnKey : destKey;
+        ServerLevel dstLevel = server.getLevel(dstKey);
+        if (dstLevel == null) {
+            AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker destination dim {} not loaded; aborting", dstKey.location());
+            return;
+        }
+
+        DimensionType srcDim = srcLevel.dimensionType();
+        DimensionType dstDim = dstLevel.dimensionType();
+        double ratio = srcDim.coordinateScale() / dstDim.coordinateScale();
+
+        Vec3 srcWorld = subWorldPos(sub.logicalPose());
+        Vec3 srcPortalCenter = srcRect.centerWorld();
+        Vec3 subOffsetFromPortal = srcWorld.subtract(srcPortalCenter);
+
+        Vec3 scaledPortalCenter = clampToWorldBorder(dstLevel,
+                new Vec3(srcPortalCenter.x * ratio, srcPortalCenter.y, srcPortalCenter.z * ratio));
+        scaledPortalCenter = clampPortalCenterY(dstLevel, scaledPortalCenter, srcRect.height());
+
+        BlockPos searchCenter = BlockPos.containing(scaledPortalCenter);
+        ensureChunksLoaded(dstLevel, searchCenter);
+
+        Block ddPortalBlock = DeeperAndDarkerCompat.portalBlock();
+        DestinationResolution resolved = resolveDeeperDarkerDestinationPortal(dstLevel, srcRect, searchCenter, ddPortalBlock);
+        if (resolved == null) {
+            AeroPortals.LOGGER.error("[AeroPortals] deeperdarker teleport: could not resolve destination portal; aborting");
+            return;
+        }
+        PortalRect dstRect = resolved.rect();
+        Vec3 dstPortalCenter = dstRect.centerWorld();
+        Vec3 dstWorld = dstPortalCenter.add(subOffsetFromPortal);
+
+        AeroPortals.LOGGER.info("[AeroPortals] deeperdarker teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
+                srcLevel.dimension().location(), srcWorld, srcPortalCenter,
+                dstKey.location(), dstPortalCenter, dstWorld,
+                ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
+
+        executeChainMove(srcLevel, sub, dstLevel, dstWorld, resolved.generated(), "deeperdarker");
+    }
+
+    private static DestinationResolution resolveDeeperDarkerDestinationPortal(
+            ServerLevel dstLevel, PortalRect srcRect, BlockPos searchCenter, Block ddPortalBlock) {
+        int radius = AeroPortalsConfig.DEST_PORTAL_SEARCH_RADIUS.get();
+        Optional<PortalRect> existing = Optional.empty();
+        if (radius > 0) {
+            Optional<BlockPos> pos = DeeperAndDarkerCompat.findClosestPortalPosition(dstLevel, searchCenter);
+            existing = pos.map(p -> PortalGeom.measureFromBlock(dstLevel, p, ddPortalBlock));
+        }
+
+        if (existing.isPresent()) {
+            PortalRect rect = existing.get();
+            boolean axisMatch = rect.axis() == srcRect.axis();
+            boolean bigEnough = rect.width() >= srcRect.width() && rect.height() >= srcRect.height();
+            boolean withinRadius = rect.minCorner().distSqr(searchCenter) <= (long) radius * radius;
+
+            if (axisMatch && bigEnough && withinRadius) {
+                AeroPortals.LOGGER.info("[AeroPortals] linking to existing deeperdarker portal at {} (axis={} {}x{})",
+                        rect.minCorner(), rect.axis(), rect.width(), rect.height());
+                return new DestinationResolution(rect, false);
+            }
+            AeroPortals.LOGGER.info("[AeroPortals] existing deeperdarker portal at {} unsuitable (axisMatch={}, bigEnough={}, withinRadius={}); will generate",
+                    rect.minCorner(), axisMatch, bigEnough, withinRadius);
+        }
+
+        if (!AeroPortalsConfig.GENERATE_MATCHING_PORTAL.get()) {
+            AeroPortals.LOGGER.warn("[AeroPortals] no suitable deeperdarker destination portal and generation disabled; cannot resolve");
+            return null;
+        }
+
+        BlockPos buildPos = chooseBuildOrigin(searchCenter, srcRect);
+        BlockState portalState = ddPortalBlock.defaultBlockState()
+                .setValue(BlockStateProperties.HORIZONTAL_AXIS, srcRect.axis());
+        AeroPortals.LOGGER.info("[AeroPortals] generating matching deeperdarker portal at {} (axis={} {}x{})",
+                buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
+        PortalRect generated = PortalBuilder.build(
+                dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height(),
+                Blocks.REINFORCED_DEEPSLATE, portalState);
         return new DestinationResolution(generated, true);
     }
 
@@ -534,7 +623,7 @@ public final class PortalTeleport {
         DimensionType dim = dstLevel.dimensionType();
         int dimMinY = dim.minY();
         int playableMaxY = dimMinY + dim.logicalHeight() - 1;
-        boolean hasRoofBedrock = dstLevel.dimension().equals(Level.NETHER);
+        boolean hasRoofBedrock = dim.hasCeiling();
         int floorBuffer = hasRoofBedrock ? 6 : 1;
         int roofBuffer = hasRoofBedrock ? (5 + Math.max(1, portalHeight)) : 1;
         int safeMinY = dimMinY + floorBuffer;
