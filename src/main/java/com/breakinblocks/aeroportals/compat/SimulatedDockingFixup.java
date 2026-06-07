@@ -33,7 +33,7 @@ public final class SimulatedDockingFixup {
         BlockPos translation = BlockPos.containing(event.translation());
         int updated = translateDockingPositions(sub, translation);
         if (updated > 0) {
-            AeroPortals.LOGGER.info("[AeroPortals] translated {} Simulated docking-connector position(s) on sub {}",
+            AeroPortals.LOGGER.debug("[AeroPortals] translated {} Simulated docking-connector position(s) on sub {}",
                     updated, event.subUuid());
         }
     }
@@ -72,7 +72,7 @@ public final class SimulatedDockingFixup {
                     BlockPos translated = current.offset(translation);
                     otherPosField.set(be, translated);
                     be.setChanged();
-                    AeroPortals.LOGGER.info("[AeroPortals] DockingConnectorBlockEntity @ {} otherConnectorPosition: {} -> {}",
+                    AeroPortals.LOGGER.debug("[AeroPortals] DockingConnectorBlockEntity @ {} otherConnectorPosition: {} -> {}",
                             be.getBlockPos(), current, translated);
                     updated++;
                 } catch (IllegalAccessException ex) {

@@ -74,7 +74,7 @@ public final class TropicraftCompat {
             tropicsKey = dimKey;
             pinaColadaKey = pinaKey;
             initialized = true;
-            AeroPortals.LOGGER.info("[AeroPortals] Tropicraft compat initialized (item={}, component={}, dim={}, drink={})",
+            AeroPortals.LOGGER.debug("[AeroPortals] Tropicraft compat initialized (item={}, component={}, dim={}, drink={})",
                     COCKTAIL_ITEM_ID, COCKTAIL_COMPONENT_ID, TROPICS_DIM_ID, PINA_COLADA_ID);
             return true;
         } catch (ClassNotFoundException e) {

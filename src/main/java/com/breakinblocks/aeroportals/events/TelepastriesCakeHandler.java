@@ -62,7 +62,7 @@ public final class TelepastriesCakeHandler {
         event.setCancellationResult(InteractionResult.SUCCESS);
 
         Vec3 dstWorld = landingForCake(srcLevel, dstLevel, sub, destKey);
-        AeroPortals.LOGGER.info("[AeroPortals] telepastries hook: player {} on sub {} ate {} in {} -> teleporting to {} at {}",
+        AeroPortals.LOGGER.debug("[AeroPortals] telepastries hook: player {} on sub {} ate {} in {} -> teleporting to {} at {}",
                 player.getGameProfile().getName(), sub.getUniqueId(),
                 state.getBlock(), srcLevel.dimension().location(),
                 destKey.location(), dstWorld);

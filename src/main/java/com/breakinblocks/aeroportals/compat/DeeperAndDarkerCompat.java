@@ -65,7 +65,7 @@ public final class DeeperAndDarkerCompat {
             othersideKey = ResourceKey.create(Registries.DIMENSION, OTHERSIDE_DIM_ID);
             portalPoiKey = ResourceKey.create(Registries.POINT_OF_INTEREST_TYPE, OTHERSIDE_PORTAL_POI_ID);
             initialized = true;
-            AeroPortals.LOGGER.info("[AeroPortals] Deeper and Darker portal compat initialized (block={}, dim={}, poi={})",
+            AeroPortals.LOGGER.debug("[AeroPortals] Deeper and Darker portal compat initialized (block={}, dim={}, poi={})",
                     PORTAL_BLOCK_ID, OTHERSIDE_DIM_ID, OTHERSIDE_PORTAL_POI_ID);
             return true;
         } catch (Throwable t) {

@@ -37,6 +37,7 @@ public final class TeleportJournal {
             UUID subUuid,
             ResourceLocation srcDim,
             ResourceLocation dstDim,
+            int srcMinBuildHeight,
             SubLevelData data) {
         try {
             Path dir = pendingDir(server);
@@ -45,6 +46,7 @@ public final class TeleportJournal {
             entry.putUUID("sub_uuid", subUuid);
             entry.putString("src_dim", srcDim.toString());
             entry.putString("dst_dim", dstDim.toString());
+            entry.putInt("src_min_y", srcMinBuildHeight);
             entry.putLong("created_at", System.currentTimeMillis());
             entry.put("sub_level_data", data.fullTag().copy());
             Path file = dir.resolve(subUuid + FILE_SUFFIX);
@@ -82,7 +84,7 @@ public final class TeleportJournal {
         }
 
         if (files.isEmpty()) return;
-        AeroPortals.LOGGER.info("[AeroPortals] journal: scanning {} pending entries", files.size());
+        AeroPortals.LOGGER.debug("[AeroPortals] journal: scanning {} pending entries", files.size());
 
         for (Path file : files) {
             replayOne(server, file);
@@ -102,11 +104,13 @@ public final class TeleportJournal {
         UUID subUuid;
         ResourceLocation srcDim;
         ResourceLocation dstDim;
+        int srcMinBuildHeight;
         CompoundTag subLevelDataTag;
         try {
             subUuid = entry.getUUID("sub_uuid");
             srcDim = ResourceLocation.parse(entry.getString("src_dim"));
             dstDim = ResourceLocation.parse(entry.getString("dst_dim"));
+            srcMinBuildHeight = entry.getInt("src_min_y");
             subLevelDataTag = entry.getCompound("sub_level_data");
         } catch (RuntimeException e) {
             AeroPortals.LOGGER.error("[AeroPortals] journal: malformed entry in {}: {}; removing", file, e.getMessage());
@@ -129,7 +133,7 @@ public final class TeleportJournal {
 
         if (dstContainer.getSubLevel(subUuid) != null
                 || dstContainer.getHoldingChunkMap().getHoldingSubLevel(subUuid) != null) {
-            AeroPortals.LOGGER.info("[AeroPortals] journal: sub {} already present in dst {} (move completed before crash); clearing entry",
+            AeroPortals.LOGGER.debug("[AeroPortals] journal: sub {} already present in dst {} (move completed before crash); clearing entry",
                     subUuid, dstDim);
             tryDelete(file);
             return;
@@ -140,7 +144,7 @@ public final class TeleportJournal {
             if (srcContainer != null
                     && (srcContainer.getSubLevel(subUuid) != null
                             || srcContainer.getHoldingChunkMap().getHoldingSubLevel(subUuid) != null)) {
-                AeroPortals.LOGGER.info("[AeroPortals] journal: sub {} still in src {} (crashed before remove); clearing entry",
+                AeroPortals.LOGGER.debug("[AeroPortals] journal: sub {} still in src {} (crashed before remove); clearing entry",
                         subUuid, srcDim);
                 tryDelete(file);
                 return;
@@ -155,12 +159,12 @@ public final class TeleportJournal {
         }
 
         AeroPortals.LOGGER.warn("[AeroPortals] journal: recovering lost sub {} into dst {}", subUuid, dstDim);
-        ServerSubLevel recovered = SubLevelSerializer.fullyLoad(dstLevel, data);
+        ServerSubLevel recovered = SableBridge.reloadInDestination(srcMinBuildHeight, dstLevel, dstContainer, data);
         if (recovered == null) {
             AeroPortals.LOGGER.error("[AeroPortals] journal: fullyLoad failed for sub {}; leaving entry in place for next start", subUuid);
             return;
         }
-        AeroPortals.LOGGER.info("[AeroPortals] journal: recovered sub {} into dst {}", subUuid, dstDim);
+        AeroPortals.LOGGER.debug("[AeroPortals] journal: recovered sub {} into dst {}", subUuid, dstDim);
         tryDelete(file);
     }
 

@@ -103,7 +103,7 @@ public final class PortalTeleport {
         Vec3 dstPortalCenter = dstRect.centerWorld();
         Vec3 dstWorld = dstPortalCenter.add(subOffsetFromPortal);
 
-        AeroPortals.LOGGER.info("[AeroPortals] nether teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
+        AeroPortals.LOGGER.debug("[AeroPortals] nether teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
                 srcLevel.dimension().location(), srcWorld, srcPortalCenter,
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
@@ -128,12 +128,12 @@ public final class PortalTeleport {
             ensureChunksLoaded(dstLevel, EndPortalLanding.PLATFORM_CENTRE);
             EndPortalLanding.ensurePlatform(dstLevel);
             dstWorld = clampToWorldBorder(dstLevel, EndPortalLanding.landingPosition(sub));
-            AeroPortals.LOGGER.info("[AeroPortals] end teleport (to End): src dim={} subPos={} portalBlock={} -> dst dim={} landing={} (platform-top y={})",
+            AeroPortals.LOGGER.debug("[AeroPortals] end teleport (to End): src dim={} subPos={} portalBlock={} -> dst dim={} landing={} (platform-top y={})",
                     srcLevel.dimension().location(), srcWorld, srcPortalBlock,
                     dstKey.location(), dstWorld, EndPortalLanding.LANDING_Y);
         } else {
             dstWorld = clampToWorldBorder(dstLevel, overworldSpawnLanding(dstLevel, sub));
-            AeroPortals.LOGGER.info("[AeroPortals] end teleport (to Overworld): src dim={} subPos={} portalBlock={} -> dst dim={} landing={} (spawn={})",
+            AeroPortals.LOGGER.debug("[AeroPortals] end teleport (to Overworld): src dim={} subPos={} portalBlock={} -> dst dim={} landing={} (spawn={})",
                     srcLevel.dimension().location(), srcWorld, srcPortalBlock,
                     dstKey.location(), dstWorld, dstLevel.getSharedSpawnPos());
         }
@@ -182,7 +182,7 @@ public final class PortalTeleport {
         Vec3 dstPortalCenter = dstRect.centerWorld();
         Vec3 dstWorld = dstPortalCenter.add(subOffsetFromPortal);
 
-        AeroPortals.LOGGER.info("[AeroPortals] aether teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
+        AeroPortals.LOGGER.debug("[AeroPortals] aether teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
                 srcLevel.dimension().location(), srcWorld, srcPortalCenter,
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
@@ -206,11 +206,11 @@ public final class PortalTeleport {
             boolean withinRadius = rect.minCorner().distSqr(searchCenter) <= (long) radius * radius;
 
             if (axisMatch && bigEnough && withinRadius) {
-                AeroPortals.LOGGER.info("[AeroPortals] linking to existing aether portal at {} (axis={} {}x{})",
+                AeroPortals.LOGGER.debug("[AeroPortals] linking to existing aether portal at {} (axis={} {}x{})",
                         rect.minCorner(), rect.axis(), rect.width(), rect.height());
                 return new DestinationResolution(rect, false);
             }
-            AeroPortals.LOGGER.info("[AeroPortals] existing aether portal at {} unsuitable (axisMatch={}, bigEnough={}, withinRadius={}); will generate",
+            AeroPortals.LOGGER.debug("[AeroPortals] existing aether portal at {} unsuitable (axisMatch={}, bigEnough={}, withinRadius={}); will generate",
                     rect.minCorner(), axisMatch, bigEnough, withinRadius);
         }
 
@@ -222,7 +222,7 @@ public final class PortalTeleport {
         BlockPos buildPos = chooseBuildOrigin(searchCenter, srcRect);
         BlockState portalState = aetherPortalBlock.defaultBlockState()
                 .setValue(BlockStateProperties.HORIZONTAL_AXIS, srcRect.axis());
-        AeroPortals.LOGGER.info("[AeroPortals] generating matching aether portal at {} (axis={} {}x{})",
+        AeroPortals.LOGGER.debug("[AeroPortals] generating matching aether portal at {} (axis={} {}x{})",
                 buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
         PortalRect generated = PortalBuilder.build(
                 dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height(),
@@ -270,7 +270,7 @@ public final class PortalTeleport {
         Vec3 dstPortalCenter = dstRect.centerWorld();
         Vec3 dstWorld = dstPortalCenter.add(subOffsetFromPortal);
 
-        AeroPortals.LOGGER.info("[AeroPortals] deeperdarker teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
+        AeroPortals.LOGGER.debug("[AeroPortals] deeperdarker teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
                 srcLevel.dimension().location(), srcWorld, srcPortalCenter,
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
@@ -294,11 +294,11 @@ public final class PortalTeleport {
             boolean withinRadius = rect.minCorner().distSqr(searchCenter) <= (long) radius * radius;
 
             if (axisMatch && bigEnough && withinRadius) {
-                AeroPortals.LOGGER.info("[AeroPortals] linking to existing deeperdarker portal at {} (axis={} {}x{})",
+                AeroPortals.LOGGER.debug("[AeroPortals] linking to existing deeperdarker portal at {} (axis={} {}x{})",
                         rect.minCorner(), rect.axis(), rect.width(), rect.height());
                 return new DestinationResolution(rect, false);
             }
-            AeroPortals.LOGGER.info("[AeroPortals] existing deeperdarker portal at {} unsuitable (axisMatch={}, bigEnough={}, withinRadius={}); will generate",
+            AeroPortals.LOGGER.debug("[AeroPortals] existing deeperdarker portal at {} unsuitable (axisMatch={}, bigEnough={}, withinRadius={}); will generate",
                     rect.minCorner(), axisMatch, bigEnough, withinRadius);
         }
 
@@ -310,7 +310,7 @@ public final class PortalTeleport {
         BlockPos buildPos = chooseBuildOrigin(searchCenter, srcRect);
         BlockState portalState = ddPortalBlock.defaultBlockState()
                 .setValue(BlockStateProperties.HORIZONTAL_AXIS, srcRect.axis());
-        AeroPortals.LOGGER.info("[AeroPortals] generating matching deeperdarker portal at {} (axis={} {}x{})",
+        AeroPortals.LOGGER.debug("[AeroPortals] generating matching deeperdarker portal at {} (axis={} {}x{})",
                 buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
         PortalRect generated = PortalBuilder.build(
                 dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height(),
@@ -322,7 +322,7 @@ public final class PortalTeleport {
         MinecraftServer server = srcLevel.getServer();
         Optional<ArsNouveauCompat.Destination> destOpt = ArsNouveauCompat.readDestination(srcLevel, srcPortalBlock);
         if (destOpt.isEmpty()) {
-            AeroPortals.LOGGER.info("[AeroPortals] ars-nouveau portal at {} has no readable destination; skipping", srcPortalBlock);
+            AeroPortals.LOGGER.debug("[AeroPortals] ars-nouveau portal at {} has no readable destination; skipping", srcPortalBlock);
             return;
         }
         ArsNouveauCompat.Destination dest = destOpt.get();
@@ -335,7 +335,7 @@ public final class PortalTeleport {
         ensureChunksLoaded(dstLevel, dest.warpPos());
         Vec3 dstWorld = clampToWorldBorder(dstLevel, landingAboveBlock(sub, dest.warpPos()));
 
-        AeroPortals.LOGGER.info("[AeroPortals] ars-nouveau teleport: src dim={} portalBlock={} -> dst dim={} warpPos={} landing={}",
+        AeroPortals.LOGGER.debug("[AeroPortals] ars-nouveau teleport: src dim={} portalBlock={} -> dst dim={} warpPos={} landing={}",
                 srcLevel.dimension().location(), srcPortalBlock, dest.dim().location(), dest.warpPos(), dstWorld);
 
         executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "ars_nouveau");
@@ -345,7 +345,7 @@ public final class PortalTeleport {
         MinecraftServer server = srcLevel.getServer();
         Optional<DraconicEvolutionCompat.Destination> destOpt = DraconicEvolutionCompat.readDestination(srcLevel, srcPortalBlock);
         if (destOpt.isEmpty()) {
-            AeroPortals.LOGGER.info("[AeroPortals] draconic portal at {} has no readable destination; skipping", srcPortalBlock);
+            AeroPortals.LOGGER.debug("[AeroPortals] draconic portal at {} has no readable destination; skipping", srcPortalBlock);
             return;
         }
         DraconicEvolutionCompat.Destination dest = destOpt.get();
@@ -358,7 +358,7 @@ public final class PortalTeleport {
         ensureChunksLoaded(dstLevel, dest.pos());
         Vec3 dstWorld = clampToWorldBorder(dstLevel, landingAboveBlock(sub, dest.pos()));
 
-        AeroPortals.LOGGER.info("[AeroPortals] draconic teleport: src dim={} portalBlock={} -> dst dim={} targetPos={} landing={}",
+        AeroPortals.LOGGER.debug("[AeroPortals] draconic teleport: src dim={} portalBlock={} -> dst dim={} targetPos={} landing={}",
                 srcLevel.dimension().location(), srcPortalBlock, dest.dim().location(), dest.pos(), dstWorld);
 
         executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "draconic");
@@ -408,7 +408,7 @@ public final class PortalTeleport {
         for (ServerSubLevel s : chainRaw) {
             if (s.isRemoved()) continue;
             if (PortalCooldown.isOnCooldown(s.getUniqueId(), currentTick)) {
-                AeroPortals.LOGGER.info("[AeroPortals] chain member {} skipped (on cooldown)", s.getUniqueId());
+                AeroPortals.LOGGER.debug("[AeroPortals] chain member {} skipped (on cooldown)", s.getUniqueId());
                 continue;
             }
             chain.add(s);
@@ -418,7 +418,7 @@ public final class PortalTeleport {
             return;
         }
         if (chain.size() > 1) {
-            AeroPortals.LOGGER.info("[AeroPortals] {} teleport: dependency chain after filter: {} SubLevels will travel together: {}",
+            AeroPortals.LOGGER.debug("[AeroPortals] {} teleport: dependency chain after filter: {} SubLevels will travel together: {}",
                     contextLabel, chain.size(),
                     chain.stream().map(s -> s.getUniqueId() + "@" + subWorldPos(s.logicalPose())).toList());
         }
@@ -450,7 +450,7 @@ public final class PortalTeleport {
         for (PendingMove pm : pending) {
             List<RiderBinding> chainRiders = captureRiders(srcLevel, pm.sub);
             List<EntityRiderBinding> chainEntities = captureEntityRiders(srcLevel, pm.sub);
-            AeroPortals.LOGGER.info("[AeroPortals] sub {} in chain: captured {} player(s), {} entity rider(s); dst={}",
+            AeroPortals.LOGGER.debug("[AeroPortals] sub {} in chain: captured {} player(s), {} entity rider(s); dst={}",
                     pm.sub.getUniqueId(), chainRiders.size(), chainEntities.size(), pm.dstPos);
             plans.add(new SubMovePlan(pm.sub, pm.srcPos, pm.dstPos, chainRiders, chainEntities));
         }
@@ -482,7 +482,7 @@ public final class PortalTeleport {
                 float yaw = rb.yawDelta() + newYawBase;
                 p.teleportTo(dstLevel, worldFinal.x, worldFinal.y, worldFinal.z,
                         Collections.<RelativeMovement>emptySet(), yaw, rb.pitch());
-                AeroPortals.LOGGER.info("[AeroPortals] moved rider {} -> {} yaw={} pitch={}",
+                AeroPortals.LOGGER.debug("[AeroPortals] moved rider {} -> {} yaw={} pitch={}",
                         p.getGameProfile().getName(), worldFinal, yaw, rb.pitch());
             }
 
@@ -494,7 +494,7 @@ public final class PortalTeleport {
                     newSub.getUniqueId(), newSub, srcLevel, dstLevel, translation));
         }
 
-        AeroPortals.LOGGER.info("[AeroPortals] {} teleport complete; moved {}/{} sub(s) from chain",
+        AeroPortals.LOGGER.debug("[AeroPortals] {} teleport complete; moved {}/{} sub(s) from chain",
                 contextLabel, moved.size(), plans.size());
     }
 
@@ -514,7 +514,7 @@ public final class PortalTeleport {
         Pose3dc pose = sub.logicalPose();
         pipeline.resetVelocity(sub);
         pipeline.teleport(sub, pose.position(), pose.orientation());
-        AeroPortals.LOGGER.info("[AeroPortals] forced client-sync for sub {} at {}", sub.getUniqueId(), pose.position());
+        AeroPortals.LOGGER.debug("[AeroPortals] forced client-sync for sub {} at {}", sub.getUniqueId(), pose.position());
     }
 
     public static final class DeferredClientSyncs {
@@ -561,11 +561,11 @@ public final class PortalTeleport {
             boolean withinRadius = rect.minCorner().distSqr(searchCenter) <= (long) radius * radius;
 
             if (axisMatch && bigEnough && withinRadius) {
-                AeroPortals.LOGGER.info("[AeroPortals] linking to existing destination portal at {} (axis={} {}x{})",
+                AeroPortals.LOGGER.debug("[AeroPortals] linking to existing destination portal at {} (axis={} {}x{})",
                         rect.minCorner(), rect.axis(), rect.width(), rect.height());
                 return new DestinationResolution(rect, false);
             }
-            AeroPortals.LOGGER.info("[AeroPortals] existing dest portal at {} unsuitable (axisMatch={}, bigEnough={}, withinRadius={}); will generate",
+            AeroPortals.LOGGER.debug("[AeroPortals] existing dest portal at {} unsuitable (axisMatch={}, bigEnough={}, withinRadius={}); will generate",
                     rect.minCorner(), axisMatch, bigEnough, withinRadius);
         }
 
@@ -575,7 +575,7 @@ public final class PortalTeleport {
         }
 
         BlockPos buildPos = chooseBuildOrigin(searchCenter, srcRect);
-        AeroPortals.LOGGER.info("[AeroPortals] generating matching portal at {} (axis={} {}x{})",
+        AeroPortals.LOGGER.debug("[AeroPortals] generating matching portal at {} (axis={} {}x{})",
                 buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
         PortalRect generated = PortalBuilder.build(dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
         return new DestinationResolution(generated, true);
@@ -631,7 +631,7 @@ public final class PortalTeleport {
         if (safeMaxY < safeMinY) safeMaxY = safeMinY;
         double clampedY = Math.max(safeMinY, Math.min(safeMaxY, portalCenter.y));
         if (clampedY != portalCenter.y) {
-            AeroPortals.LOGGER.info("[AeroPortals] clamped destination portal centre Y in {} from {} to {} (safe range [{}, {}])",
+            AeroPortals.LOGGER.debug("[AeroPortals] clamped destination portal centre Y in {} from {} to {} (safe range [{}, {}])",
                     dstLevel.dimension().location(), portalCenter.y, clampedY, safeMinY, safeMaxY);
         }
         return new Vec3(portalCenter.x, clampedY, portalCenter.z);
@@ -678,7 +678,7 @@ public final class PortalTeleport {
             float yawDelta = e.getYRot() - subYawNow;
             out.add(new EntityRiderBinding(e.getUUID(), offset, yawDelta, e.getXRot()));
             e.setPortalCooldown(VANILLA_PORTAL_COOLDOWN_OVERRIDE);
-            AeroPortals.LOGGER.info("[AeroPortals] capture entity {} ({}) offset-from-sub={}",
+            AeroPortals.LOGGER.debug("[AeroPortals] capture entity {} ({}) offset-from-sub={}",
                     e.getType(), e.getUUID(), offset);
         }
         return out;
@@ -702,7 +702,7 @@ public final class PortalTeleport {
             Entity newEntity = e.changeDimension(transition);
             if (newEntity != null) {
                 lastMovedEntities.put(b.entityUuid(), newEntity);
-                AeroPortals.LOGGER.info("[AeroPortals] moved entity {} ({}) -> {} yaw={}",
+                AeroPortals.LOGGER.debug("[AeroPortals] moved entity {} ({}) -> {} yaw={}",
                         newEntity.getType(), b.entityUuid(), worldFinal, yaw);
             } else {
                 AeroPortals.LOGGER.warn("[AeroPortals] entity {} ({}) changeDimension returned null", e.getType(), b.entityUuid());
@@ -727,7 +727,7 @@ public final class PortalTeleport {
             float yawDelta = p.getYRot() - subYawNow;
             out.add(new RiderBinding(p.getUUID(), offset, yawDelta, p.getXRot()));
             p.setPortalCooldown(VANILLA_PORTAL_COOLDOWN_OVERRIDE);
-            AeroPortals.LOGGER.info("[AeroPortals] capture rider {} offset-from-sub={} yawDelta={}, suppressed vanilla portal travel",
+            AeroPortals.LOGGER.debug("[AeroPortals] capture rider {} offset-from-sub={} yawDelta={}, suppressed vanilla portal travel",
                     p.getGameProfile().getName(), offset, yawDelta);
         }
         return out;

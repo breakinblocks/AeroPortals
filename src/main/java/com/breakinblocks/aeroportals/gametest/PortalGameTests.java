@@ -55,6 +55,8 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.NetherPortalBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.SpawnerBlockEntity;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.AABB;
@@ -872,7 +874,8 @@ public class PortalGameTests {
                     
                     TeleportJournal.write(
                             srcLevel.getServer(), data.uuid(),
-                            srcLevel.dimension().location(), dstLevel.dimension().location(), data);
+                            srcLevel.dimension().location(), dstLevel.dimension().location(),
+                            srcLevel.getMinBuildHeight(), data);
 
                     
                     srcContainer.removeSubLevel(sub, SubLevelRemovalReason.REMOVED);
@@ -940,7 +943,8 @@ public class PortalGameTests {
                     
                     TeleportJournal.write(
                             srcLevel.getServer(), data.uuid(),
-                            srcLevel.dimension().location(), dstLevel.dimension().location(), data);
+                            srcLevel.dimension().location(), dstLevel.dimension().location(),
+                            srcLevel.getMinBuildHeight(), data);
                     AeroPortals.LOGGER.info("[AeroPortals/test] journal-stale-src setup: wrote entry, sub still in src");
                 })
                 .thenIdle(2)
@@ -1859,5 +1863,97 @@ public class PortalGameTests {
                     }
                 })
                 .thenSucceed();
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void endToEnd_relocatedSubLevel_preservesSpawnerData(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
+        if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
+
+        UUID[] subUuidRef = new UUID[1];
+        int[] occupiedIndexRef = new int[]{-1};
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.SPAWNER.defaultBlockState());
+                    BlockEntity be = srcLevel.getBlockEntity(worldPos);
+                    if (!(be instanceof SpawnerBlockEntity spawner)) { helper.fail("spawner BE missing in world"); return; }
+                    spawner.getSpawner().setEntityId(EntityType.ZOMBIE, srcLevel, srcLevel.getRandom(), worldPos);
+                    spawner.setChanged();
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    subUuidRef[0] = sub.getUniqueId();
+
+                    BlockPos plotSpawner = findSpawnerInPlot(srcLevel, sub);
+                    if (plotSpawner == null) { helper.fail("assembly did not carry the spawner block into the SubLevel"); return; }
+                    if (!spawnerEntityId(srcLevel, plotSpawner).equals("minecraft:zombie")) {
+                        helper.fail("assembly did not preserve spawner data pre-teleport; cannot isolate the move");
+                        return;
+                    }
+
+                    var origin = dstContainer.getOrigin();
+                    int localPlotX = sub.getPlot().plotPos.x - origin.x;
+                    int localPlotZ = sub.getPlot().plotPos.z - origin.y;
+                    occupiedIndexRef[0] = dstContainer.getIndex(localPlotX, localPlotZ);
+                    dstContainer.getOccupancy().set(occupiedIndexRef[0]);
+
+                    PortalTeleport.teleport(srcLevel, sub, new PortalRect(worldPos, Direction.Axis.X, 2, 3));
+                    if (occupiedIndexRef[0] >= 0) dstContainer.getOccupancy().clear(occupiedIndexRef[0]);
+
+                    ServerSubLevel dstSub = (ServerSubLevel) dstContainer.getSubLevel(subUuidRef[0]);
+                    if (dstSub == null) {
+                        helper.fail("sub did not arrive active in dst dim (needed to read block entity)");
+                        return;
+                    }
+                    int relocX = dstSub.getPlot().plotPos.x - dstContainer.getOrigin().x;
+                    int relocZ = dstSub.getPlot().plotPos.z - dstContainer.getOrigin().y;
+                    AeroPortals.LOGGER.info("[AeroPortals/test] sub crossed to dst plot {},{}", relocX, relocZ);
+
+                    BlockPos dstPlotSpawner = findSpawnerInPlot(dstLevel, dstSub);
+                    if (dstPlotSpawner == null) {
+                        helper.fail("spawner block missing after the move");
+                        return;
+                    }
+                    String id = spawnerEntityId(dstLevel, dstPlotSpawner);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] spawner entity id after move = '{}'", id);
+                    if (!id.equals("minecraft:zombie")) {
+                        helper.fail("spawner lost its data after the move (expected minecraft:zombie, got '" + id + "')");
+                        return;
+                    }
+                })
+                .thenSucceed();
+    }
+
+    private static BlockPos findSpawnerInPlot(ServerLevel level, ServerSubLevel sub) {
+        var bounds = sub.getPlot().getBoundingBox();
+        if (bounds == BoundingBox3i.EMPTY) return null;
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+            for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+                for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
+                    cursor.set(x, y, z);
+                    if (level.getBlockState(cursor).is(Blocks.SPAWNER)) return cursor.immutable();
+                }
+            }
+        }
+        return null;
+    }
+
+    private static String spawnerEntityId(ServerLevel level, BlockPos pos) {
+        BlockEntity be = level.getBlockEntity(pos);
+        if (!(be instanceof SpawnerBlockEntity)) return "";
+        CompoundTag tag = be.saveWithoutMetadata(level.registryAccess());
+        return tag.getCompound("SpawnData").getCompound("entity").getString("id");
     }
 }

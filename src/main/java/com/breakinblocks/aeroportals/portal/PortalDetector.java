@@ -53,18 +53,18 @@ public final class PortalDetector {
                                 hit.pos());
                         continue;
                     }
-                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps nether portal at {} (axis={} {}x{}) in dim {}",
+                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps nether portal at {} (axis={} {}x{}) in dim {}",
                             sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
                             level.dimension().location());
                     PortalTeleport.teleport(level, sub, srcRect);
                 }
                 case END -> {
-                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps end portal at {} in dim {}",
+                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps end portal at {} in dim {}",
                             sub.getUniqueId(), hit.pos(), level.dimension().location());
                     PortalTeleport.teleportEnd(level, sub, hit.pos());
                 }
                 case ARS_NOUVEAU -> {
-                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps ars-nouveau portal at {} in dim {}",
+                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps ars-nouveau portal at {} in dim {}",
                             sub.getUniqueId(), hit.pos(), level.dimension().location());
                     PortalTeleport.teleportArsNouveau(level, sub, hit.pos());
                 }
@@ -76,13 +76,13 @@ public final class PortalDetector {
                                 hit.pos());
                         continue;
                     }
-                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps aether portal at {} (axis={} {}x{}) in dim {}",
+                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps aether portal at {} (axis={} {}x{}) in dim {}",
                             sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
                             level.dimension().location());
                     PortalTeleport.teleportAether(level, sub, srcRect);
                 }
                 case DRACONIC -> {
-                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps draconic portal at {} in dim {}",
+                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps draconic portal at {} in dim {}",
                             sub.getUniqueId(), hit.pos(), level.dimension().location());
                     PortalTeleport.teleportDraconic(level, sub, hit.pos());
                 }
@@ -94,7 +94,7 @@ public final class PortalDetector {
                                 hit.pos());
                         continue;
                     }
-                    AeroPortals.LOGGER.info("[AeroPortals] sub {} overlaps deeperdarker portal at {} (axis={} {}x{}) in dim {}",
+                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps deeperdarker portal at {} (axis={} {}x{}) in dim {}",
                             sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
                             level.dimension().location());
                     PortalTeleport.teleportDeeperDarker(level, sub, srcRect);

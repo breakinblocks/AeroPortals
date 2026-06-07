@@ -40,7 +40,7 @@ public final class VanillaPortalCanceller {
                 event.setCanceled(true);
                 player.setPortalCooldown(COOLDOWN_AFTER_CANCEL);
                 cancelledFor.add(player.getUUID());
-                AeroPortals.LOGGER.info("[AeroPortals] cancelled vanilla portal for rider {} (SubLevel {} is at a portal)",
+                AeroPortals.LOGGER.debug("[AeroPortals] cancelled vanilla portal for rider {} (SubLevel {} is at a portal)",
                         player.getGameProfile().getName(), tracking.getUniqueId());
             }
             return;
@@ -56,7 +56,7 @@ public final class VanillaPortalCanceller {
                 event.setCanceled(true);
                 entity.setPortalCooldown(COOLDOWN_AFTER_CANCEL);
                 cancelledFor.add(entity.getUUID());
-                AeroPortals.LOGGER.info("[AeroPortals] cancelled vanilla portal for {} ({}) - on/near SubLevel {} at a portal",
+                AeroPortals.LOGGER.debug("[AeroPortals] cancelled vanilla portal for {} ({}) - on/near SubLevel {} at a portal",
                         entity.getType(), entity.getUUID(), sub.getUniqueId());
                 return;
             }

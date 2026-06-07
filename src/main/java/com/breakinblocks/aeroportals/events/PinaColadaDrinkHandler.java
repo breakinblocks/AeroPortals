@@ -49,7 +49,7 @@ public final class PinaColadaDrinkHandler {
         }
 
         Vec3 dstWorld = landingAtPlayerColumn(srcLevel, dstLevel, sub);
-        AeroPortals.LOGGER.info("[AeroPortals] pina colada hook: player {} on sub {} drank pina colada in {} -> teleporting to {} at {}",
+        AeroPortals.LOGGER.debug("[AeroPortals] pina colada hook: player {} on sub {} drank pina colada in {} -> teleporting to {} at {}",
                 player.getGameProfile().getName(), sub.getUniqueId(),
                 srcLevel.dimension().location(), dstLevel.dimension().location(), dstWorld);
         PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld, true, "pina_colada");

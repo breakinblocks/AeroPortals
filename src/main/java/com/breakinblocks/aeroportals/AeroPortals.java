@@ -27,7 +27,7 @@ public class AeroPortals {
     private static void onCommonSetup(FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {
             sableLoaded = ModList.get().isLoaded("sable");
-            LOGGER.info("[AeroPortals] common setup: sable loaded={}", sableLoaded);
+            LOGGER.debug("[AeroPortals] common setup: sable loaded={}", sableLoaded);
             if (!sableLoaded) {
                 LOGGER.warn("[AeroPortals] Sable mod not detected - AeroPortals will be dormant. Loaded mod ids:");
                 ModList.get().getMods().forEach(m -> LOGGER.warn("[AeroPortals]   - {}", m.getModId()));

@@ -124,7 +124,7 @@ public final class AeroPortalsCommands {
                         + " at " + formatVec(dstPos) + " (no airship detected)"), true);
         player.teleportTo(dstLevel, dstPos.x, dstPos.y, dstPos.z,
                 Set.<RelativeMovement>of(), player.getYRot(), player.getXRot());
-        AeroPortals.LOGGER.info("[AeroPortals] OP command: teleported player {} to {} at {}",
+        AeroPortals.LOGGER.debug("[AeroPortals] OP command: teleported player {} to {} at {}",
                 player.getGameProfile().getName(), dstKeyFinal.location(), dstPos);
         return 1;
     }

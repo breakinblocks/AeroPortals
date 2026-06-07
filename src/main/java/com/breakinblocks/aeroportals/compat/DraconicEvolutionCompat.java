@@ -93,7 +93,7 @@ public final class DraconicEvolutionCompat {
             vector3Y = vy;
             vector3Z = vz;
             initialized = true;
-            AeroPortals.LOGGER.info("[AeroPortals] Draconic Evolution compat initialized (block={})", PORTAL_BLOCK_ID);
+            AeroPortals.LOGGER.debug("[AeroPortals] Draconic Evolution compat initialized (block={})", PORTAL_BLOCK_ID);
             return true;
         } catch (ClassNotFoundException e) {
             AeroPortals.LOGGER.warn("[AeroPortals] DE loaded but expected class not found ({}); compat disabled", e.getMessage());

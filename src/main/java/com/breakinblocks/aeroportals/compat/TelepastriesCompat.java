@@ -49,7 +49,7 @@ public final class TelepastriesCompat {
             getCakeWorldMethod = cakeWorldMethod;
             consumeCakeMethod = consumeMethod;
             initialized = true;
-            AeroPortals.LOGGER.info("[AeroPortals] TelePastries compat initialized");
+            AeroPortals.LOGGER.debug("[AeroPortals] TelePastries compat initialized");
             return true;
         } catch (ClassNotFoundException e) {
             AeroPortals.LOGGER.warn("[AeroPortals] TelePastries loaded but BlockCakeBase class not found ({}); compat disabled",

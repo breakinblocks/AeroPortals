@@ -115,7 +115,7 @@ public final class PlayerPortalSizeMatcher {
         BlockState portalState = portalBlock.defaultBlockState()
                 .setValue(BlockStateProperties.HORIZONTAL_AXIS, axis);
 
-        AeroPortals.LOGGER.info("[AeroPortals] enlarging on-foot {} portal for {} from {}x{} to {}x{} at {}",
+        AeroPortals.LOGGER.debug("[AeroPortals] enlarging on-foot {} portal for {} from {}x{} to {}x{} at {}",
                 captured.kind(), player.getGameProfile().getName(),
                 dst.width(), dst.height(), src.width(), src.height(), buildOrigin);
 

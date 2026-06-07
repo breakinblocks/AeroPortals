@@ -48,7 +48,7 @@ public final class EndPortalLanding {
         }
 
         EndPlatformFeature.createEndPlatform(endLevel, PLATFORM_ORIGIN, false);
-        AeroPortals.LOGGER.info("[AeroPortals] built vanilla End obsidian platform at spawn point {}", SPAWN_POINT);
+        AeroPortals.LOGGER.debug("[AeroPortals] built vanilla End obsidian platform at spawn point {}", SPAWN_POINT);
         return true;
     }
 }

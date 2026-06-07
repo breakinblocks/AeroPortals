@@ -66,7 +66,7 @@ public final class AetherCompat {
             portalForcerCtor = ctor;
             findClosestPortalMethod = find;
             initialized = true;
-            AeroPortals.LOGGER.info("[AeroPortals] Aether portal compat initialized (block={}, levelUtil={}, forcer={})",
+            AeroPortals.LOGGER.debug("[AeroPortals] Aether portal compat initialized (block={}, levelUtil={}, forcer={})",
                     PORTAL_BLOCK_ID, LEVEL_UTIL_CLASS, PORTAL_FORCER_CLASS);
             return true;
         } catch (ClassNotFoundException e) {

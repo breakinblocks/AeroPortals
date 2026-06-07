@@ -15,6 +15,8 @@ import dev.ryanhcode.sable.util.SableNBTUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -42,7 +44,7 @@ public final class SableBridge {
         }
 
         SubLevelData data = SubLevelSerializer.toData(src, List.of());
-        AeroPortals.LOGGER.info("[AeroPortals] SableBridge: snapshotted sub uuid={} bounds={}", data.uuid(), data.bounds());
+        AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: snapshotted sub uuid={} bounds={}", data.uuid(), data.bounds());
 
         CompoundTag tag = data.fullTag();
         CompoundTag poseTag = tag.getCompound("pose");
@@ -52,19 +54,27 @@ public final class SableBridge {
 
         TeleportJournal.write(
                 srcLevel.getServer(), data.uuid(),
-                srcLevel.dimension().location(), dstLevel.dimension().location(), data);
+                srcLevel.dimension().location(), dstLevel.dimension().location(),
+                srcLevel.getMinBuildHeight(), data);
 
         srcContainer.removeSubLevel(src, SubLevelRemovalReason.REMOVED);
-        AeroPortals.LOGGER.info("[AeroPortals] SableBridge: removed source sub-level");
+        AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: removed source sub-level");
 
-        ServerSubLevel loaded = tryLoad(dstLevel, dstContainer, data);
+        ServerSubLevel loaded = reloadInDestination(srcLevel.getMinBuildHeight(), dstLevel, dstContainer, data);
         if (loaded == null) {
             AeroPortals.LOGGER.error("[AeroPortals] SableBridge: fullyLoad failed in destination; leaving journal entry for recovery on next start");
         } else {
-            AeroPortals.LOGGER.info("[AeroPortals] SableBridge: loaded into {} at {}",
+            AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: loaded into {} at {}",
                     dstLevel.dimension().location(), loaded.logicalPose().position());
-            rebuildPhysicsData(dstLevel, loaded, dstContainer);
             TeleportJournal.delete(srcLevel.getServer(), data.uuid());
+        }
+        return loaded;
+    }
+
+    public static ServerSubLevel reloadInDestination(int srcMinBuildHeight, ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
+        ServerSubLevel loaded = tryLoad(srcMinBuildHeight, dstLevel, dstContainer, data);
+        if (loaded != null) {
+            rebuildPhysicsData(dstLevel, loaded, dstContainer);
         }
         return loaded;
     }
@@ -98,12 +108,12 @@ public final class SableBridge {
                 }
             }
         }
-        AeroPortals.LOGGER.info("[AeroPortals] SableBridge: rebuilt physics data for sub {} ({} blocks); mass.isInvalid={} mass.value={}",
+        AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: rebuilt physics data for sub {} ({} blocks); mass.isInvalid={} mass.value={}",
                 sub.getUniqueId(), blocksProcessed,
                 sub.getMassTracker().isInvalid(), sub.getMassTracker().getMass());
     }
 
-    private static ServerSubLevel tryLoad(ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
+    private static ServerSubLevel tryLoad(int srcMinBuildHeight, ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
         CompoundTag tag = data.fullTag();
         CompoundTag plotTag = tag.getCompound("plot");
         int origPlotX = plotTag.getInt("plot_x");
@@ -115,14 +125,45 @@ public final class SableBridge {
             return null;
         }
 
-        if (plot[0] != origPlotX || plot[1] != origPlotZ) {
-            AeroPortals.LOGGER.info("[AeroPortals] SableBridge: original plot {},{} occupied in destination; relocating sub {} to free plot {},{}",
-                    origPlotX, origPlotZ, data.uuid(), plot[0], plot[1]);
+        int shift = dstContainer.getLogPlotSize() + 4;
+        int deltaX = (plot[0] - origPlotX) << shift;
+        int deltaZ = (plot[1] - origPlotZ) << shift;
+        int deltaY = dstLevel.getMinBuildHeight() - srcMinBuildHeight;
+
+        if (deltaX != 0 || deltaZ != 0) {
+            AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: original plot {},{} occupied in destination; relocating sub {} to free plot {},{} (block shift {},{})",
+                    origPlotX, origPlotZ, data.uuid(), plot[0], plot[1], deltaX, deltaZ);
             plotTag.putInt("plot_x", plot[0]);
             plotTag.putInt("plot_z", plot[1]);
         }
+        if (deltaX != 0 || deltaY != 0 || deltaZ != 0) {
+            if (deltaY != 0) {
+                AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: dimension min-height differs (src {} -> dst {}); shifting block-entity coordinates by {} in Y",
+                        srcMinBuildHeight, dstLevel.getMinBuildHeight(), deltaY);
+            }
+            offsetPlotCoordinates(plotTag, deltaX, deltaY, deltaZ);
+        }
 
         return SubLevelSerializer.fullyLoad(dstLevel, data);
+    }
+
+    private static void offsetPlotCoordinates(CompoundTag plotTag, int deltaX, int deltaY, int deltaZ) {
+        CompoundTag chunks = plotTag.getCompound("chunks");
+        for (String key : chunks.getAllKeys()) {
+            CompoundTag chunkTag = chunks.getCompound(key);
+            offsetCoordinateList(chunkTag.getList("block_entities", Tag.TAG_COMPOUND), deltaX, deltaY, deltaZ);
+            offsetCoordinateList(chunkTag.getList("block_ticks", Tag.TAG_COMPOUND), deltaX, deltaY, deltaZ);
+            offsetCoordinateList(chunkTag.getList("fluid_ticks", Tag.TAG_COMPOUND), deltaX, deltaY, deltaZ);
+        }
+    }
+
+    private static void offsetCoordinateList(ListTag list, int deltaX, int deltaY, int deltaZ) {
+        for (int i = 0; i < list.size(); i++) {
+            CompoundTag entry = list.getCompound(i);
+            if (entry.contains("x", Tag.TAG_INT)) entry.putInt("x", entry.getInt("x") + deltaX);
+            if (entry.contains("y", Tag.TAG_INT)) entry.putInt("y", entry.getInt("y") + deltaY);
+            if (entry.contains("z", Tag.TAG_INT)) entry.putInt("z", entry.getInt("z") + deltaZ);
+        }
     }
 
     private static int[] findFreePlot(ServerSubLevelContainer container, int preferX, int preferZ) {

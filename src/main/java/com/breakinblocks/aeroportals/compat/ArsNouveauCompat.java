@@ -62,7 +62,7 @@ public final class ArsNouveauCompat {
             dimIdField = dim;
             rotationVecField = rot;
             initialized = true;
-            AeroPortals.LOGGER.info("[AeroPortals] Ars Nouveau portal compat initialized (block={}, tile={})",
+            AeroPortals.LOGGER.debug("[AeroPortals] Ars Nouveau portal compat initialized (block={}, tile={})",
                     PORTAL_BLOCK_ID, PORTAL_TILE_CLASS);
             return true;
         } catch (ClassNotFoundException e) {
