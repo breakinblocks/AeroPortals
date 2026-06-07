@@ -7,7 +7,6 @@ import dev.ryanhcode.sable.companion.math.BoundingBox3i;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.companion.math.Pose3d;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
-import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.ryanhcode.sable.sublevel.storage.SubLevelRemovalReason;
 import dev.ryanhcode.sable.sublevel.storage.serialization.SubLevelData;
 import dev.ryanhcode.sable.sublevel.storage.serialization.SubLevelSerializer;
@@ -23,11 +22,10 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.BitSet;
 import java.util.List;
 
 public final class SableBridge {
-    private static final int MAX_PLOT_SCAN = 256;
-
     private SableBridge() {}
 
     public static ServerSubLevel moveAcrossDimensions(
@@ -106,33 +104,48 @@ public final class SableBridge {
     }
 
     private static ServerSubLevel tryLoad(ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
-        try {
-            ServerSubLevel loaded = SubLevelSerializer.fullyLoad(dstLevel, data);
-            if (loaded != null) return loaded;
-        } catch (IllegalArgumentException collision) {
-            AeroPortals.LOGGER.warn("[AeroPortals] SableBridge: destination plot collision ({}). Scanning for a free slot.", collision.getMessage());
-        }
-
         CompoundTag tag = data.fullTag();
         CompoundTag plotTag = tag.getCompound("plot");
         int origPlotX = plotTag.getInt("plot_x");
         int origPlotZ = plotTag.getInt("plot_z");
 
-        for (int dz = 0; dz < MAX_PLOT_SCAN; dz++) {
-            for (int dx = 0; dx < MAX_PLOT_SCAN; dx++) {
-                int candidateX = origPlotX + dx;
-                int candidateZ = origPlotZ + dz;
-                SubLevel existing = dstContainer.getSubLevel(candidateX, candidateZ);
-                if (existing != null) continue;
-                plotTag.putInt("plot_x", candidateX);
-                plotTag.putInt("plot_z", candidateZ);
-                try {
-                    ServerSubLevel loaded = SubLevelSerializer.fullyLoad(dstLevel, data);
-                    if (loaded != null) return loaded;
-                } catch (IllegalArgumentException ignored) {
+        int[] plot = findFreePlot(dstContainer, origPlotX, origPlotZ);
+        if (plot == null) {
+            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination container has no free plot; aborting load for sub {}", data.uuid());
+            return null;
+        }
+
+        if (plot[0] != origPlotX || plot[1] != origPlotZ) {
+            AeroPortals.LOGGER.info("[AeroPortals] SableBridge: original plot {},{} occupied in destination; relocating sub {} to free plot {},{}",
+                    origPlotX, origPlotZ, data.uuid(), plot[0], plot[1]);
+            plotTag.putInt("plot_x", plot[0]);
+            plotTag.putInt("plot_z", plot[1]);
+        }
+
+        return SubLevelSerializer.fullyLoad(dstLevel, data);
+    }
+
+    private static int[] findFreePlot(ServerSubLevelContainer container, int preferX, int preferZ) {
+        BitSet occupancy = container.getOccupancy();
+        int sideLength = 1 << container.getLogSideLength();
+
+        if (isPlotFree(container, occupancy, sideLength, preferX, preferZ)) {
+            return new int[]{preferX, preferZ};
+        }
+        for (int z = 0; z < sideLength; z++) {
+            for (int x = 0; x < sideLength; x++) {
+                if (isPlotFree(container, occupancy, sideLength, x, z)) {
+                    return new int[]{x, z};
                 }
             }
         }
         return null;
+    }
+
+    private static boolean isPlotFree(ServerSubLevelContainer container, BitSet occupancy, int sideLength, int x, int z) {
+        if (x < 0 || x >= sideLength || z < 0 || z >= sideLength) {
+            return false;
+        }
+        return !occupancy.get(container.getIndex(x, z));
     }
 }
