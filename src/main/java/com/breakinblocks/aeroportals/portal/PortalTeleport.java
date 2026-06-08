@@ -494,7 +494,7 @@ public final class PortalTeleport {
             forceClientSync(dstLevel, newSub);
             DeferredClientSyncs.scheduleRetries(server.getTickCount(), dstLevel, newSub);
             PortalCooldown.mark(newSub.getUniqueId(), server.getTickCount());
-            PortalCooldown.suppressUntilLeftPortal(newSub.getUniqueId());
+            PortalCooldown.suppressUntilLeftPortal(newSub.getUniqueId(), newSubPos);
             NeoForge.EVENT_BUS.post(new SubLevelTransferEvent(
                     newSub.getUniqueId(), newSub, srcLevel, dstLevel, translation));
         }

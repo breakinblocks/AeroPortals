@@ -43,7 +43,7 @@ public final class PortalDetector {
 
             PortalHit hit = findPortalBlock(level, aabb);
             if (hit == null) {
-                PortalCooldown.clearSuppression(sub.getUniqueId());
+                PortalCooldown.noteAwayFromPortal(sub.getUniqueId(), aabb.getCenter());
                 continue;
             }
             if (PortalCooldown.isOnCooldown(sub.getUniqueId(), now)) continue;
