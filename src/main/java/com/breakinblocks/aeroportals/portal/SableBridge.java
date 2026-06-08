@@ -26,6 +26,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.BitSet;
 import java.util.List;
+import java.util.UUID;
 
 public final class SableBridge {
     private SableBridge() {}
@@ -47,6 +48,8 @@ public final class SableBridge {
         AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: snapshotted sub uuid={} bounds={}", data.uuid(), data.bounds());
 
         CompoundTag tag = data.fullTag();
+        CompoundTag sourceSnapshot = tag.copy();
+
         CompoundTag poseTag = tag.getCompound("pose");
         Pose3d pose = SableNBTUtils.readPose3d(poseTag);
         pose.position().set(dstWorldPos.x, dstWorldPos.y, dstWorldPos.z);
@@ -60,15 +63,43 @@ public final class SableBridge {
         srcContainer.removeSubLevel(src, SubLevelRemovalReason.REMOVED);
         AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: removed source sub-level");
 
-        ServerSubLevel loaded = reloadInDestination(srcLevel.getMinBuildHeight(), dstLevel, dstContainer, data);
-        if (loaded == null) {
-            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: fullyLoad failed in destination; leaving journal entry for recovery on next start");
-        } else {
+        ServerSubLevel loaded;
+        try {
+            loaded = reloadInDestination(srcLevel.getMinBuildHeight(), dstLevel, dstContainer, data);
+        } catch (RuntimeException e) {
+            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination load threw for sub {}; will restore to source", data.uuid(), e);
+            loaded = null;
+        }
+
+        if (loaded != null) {
             AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: loaded into {} at {}",
                     dstLevel.dimension().location(), loaded.logicalPose().position());
             TeleportJournal.delete(srcLevel.getServer(), data.uuid());
+            return loaded;
         }
-        return loaded;
+
+        if (restoreToSource(srcLevel, srcContainer, sourceSnapshot, data.uuid())) {
+            TeleportJournal.delete(srcLevel.getServer(), data.uuid());
+        } else {
+            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination load AND source restore failed for sub {}; left in journal for recovery on next start", data.uuid());
+        }
+        return null;
+    }
+
+    private static boolean restoreToSource(ServerLevel srcLevel, ServerSubLevelContainer srcContainer, CompoundTag sourceSnapshot, UUID uuid) {
+        SubLevelData restoreData = SubLevelSerializer.fromData(sourceSnapshot);
+        if (restoreData == null) return false;
+        ServerSubLevel restored;
+        try {
+            restored = reloadInDestination(srcLevel.getMinBuildHeight(), srcLevel, srcContainer, restoreData);
+        } catch (RuntimeException e) {
+            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: source restore threw for sub {}", uuid, e);
+            return false;
+        }
+        if (restored == null) return false;
+        AeroPortals.LOGGER.warn("[AeroPortals] SableBridge: destination load failed; restored sub {} to source {} (teleport cancelled)",
+                uuid, srcLevel.dimension().location());
+        return true;
     }
 
     public static ServerSubLevel reloadInDestination(int srcMinBuildHeight, ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
@@ -119,6 +150,13 @@ public final class SableBridge {
         int origPlotX = plotTag.getInt("plot_x");
         int origPlotZ = plotTag.getInt("plot_z");
 
+        int dstSectionCount = dstLevel.getSectionsCount();
+        if (!sectionsFitDestination(plotTag, dstSectionCount)) {
+            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: sub {} is too tall for destination {} ({} sections); aborting move so it can stay where it is",
+                    data.uuid(), dstLevel.dimension().location(), dstSectionCount);
+            return null;
+        }
+
         int[] plot = findFreePlot(dstContainer, origPlotX, origPlotZ);
         if (plot == null) {
             AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination container has no free plot; aborting load for sub {}", data.uuid());
@@ -145,6 +183,25 @@ public final class SableBridge {
         }
 
         return SubLevelSerializer.fullyLoad(dstLevel, data);
+    }
+
+    private static boolean sectionsFitDestination(CompoundTag plotTag, int dstSectionCount) {
+        CompoundTag chunks = plotTag.getCompound("chunks");
+        for (String key : chunks.getAllKeys()) {
+            CompoundTag sections = chunks.getCompound(key).getCompound("sections");
+            for (String sectionKey : sections.getAllKeys()) {
+                int idx;
+                try {
+                    idx = Integer.parseInt(sectionKey);
+                } catch (NumberFormatException e) {
+                    continue;
+                }
+                if (idx < 0 || idx >= dstSectionCount) {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static void offsetPlotCoordinates(CompoundTag plotTag, int deltaX, int deltaY, int deltaZ) {

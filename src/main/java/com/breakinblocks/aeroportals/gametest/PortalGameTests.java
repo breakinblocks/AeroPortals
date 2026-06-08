@@ -66,7 +66,9 @@ import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import com.breakinblocks.aeroportals.portal.SableBridge;
 import java.lang.reflect.Method;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
@@ -1955,5 +1957,116 @@ public class PortalGameTests {
         if (!(be instanceof SpawnerBlockEntity)) return "";
         CompoundTag tag = be.saveWithoutMetadata(level.registryAccess());
         return tag.getCompound("SpawnData").getCompound("entity").getString("id");
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void bounceSuppression_arrivedSubDoesNotImmediatelyReturn(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
+        if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
+
+        UUID[] subUuidRef = new UUID[1];
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    subUuidRef[0] = sub.getUniqueId();
+
+                    PortalTeleport.teleport(srcLevel, sub, new PortalRect(worldPos, Direction.Axis.X, 2, 3));
+
+                    if (dstContainer.getSubLevel(subUuidRef[0]) == null) {
+                        helper.fail("sub did not arrive in nether; cannot test bounce suppression");
+                        return;
+                    }
+                    if (!PortalCooldown.isSuppressedUntilLeftPortal(subUuidRef[0])) {
+                        helper.fail("arrived sub should be suppressed from an immediate return trip");
+                        return;
+                    }
+
+                    PortalCooldown.mark(subUuidRef[0], 0L);
+                    PortalDetector.scan(dstLevel);
+
+                    boolean inDst = dstContainer.getSubLevel(subUuidRef[0]) != null;
+                    boolean inSrc = srcContainer.getSubLevel(subUuidRef[0]) != null;
+                    AeroPortals.LOGGER.info("[AeroPortals/test] bounce-suppress: inDst={} inSrc={}", inDst, inSrc);
+                    if (inSrc || !inDst) {
+                        helper.fail("suppressed sub bounced straight back through the portal (inDst=" + inDst + ", inSrc=" + inSrc + ")");
+                        return;
+                    }
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void selfHeal_destinationLoadFailure_restoresSubToSource(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
+        if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
+
+        UUID[] subUuidRef = new UUID[1];
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    subUuidRef[0] = sub.getUniqueId();
+
+                    BitSet occ = dstContainer.getOccupancy();
+                    BitSet saved = (BitSet) occ.clone();
+                    int side = 1 << dstContainer.getLogSideLength();
+                    occ.set(0, side * side);
+
+                    ServerSubLevel result;
+                    try {
+                        result = SableBridge.moveAcrossDimensions(sub, srcLevel, dstLevel,
+                                new Vec3(worldPos.getX() + 0.5, worldPos.getY() + 0.5, worldPos.getZ() + 0.5));
+                    } finally {
+                        occ.clear();
+                        occ.or(saved);
+                    }
+
+                    if (result != null) {
+                        helper.fail("move should have failed with no free destination plot, but returned a sub");
+                        return;
+                    }
+
+                    boolean inSrc = srcContainer.getSubLevel(subUuidRef[0]) != null;
+                    boolean inDst = dstContainer.getSubLevel(subUuidRef[0]) != null
+                            || dstContainer.getHoldingChunkMap().getHoldingSubLevel(subUuidRef[0]) != null;
+                    AeroPortals.LOGGER.info("[AeroPortals/test] self-heal: inSrc={} inDst={}", inSrc, inDst);
+
+                    if (!inSrc) {
+                        helper.fail("sub should be restored to source after a failed destination load, but it vanished");
+                        return;
+                    }
+                    if (inDst) {
+                        helper.fail("sub should not be present in destination after a failed move");
+                        return;
+                    }
+                })
+                .thenSucceed();
     }
 }

@@ -64,6 +64,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PortalTeleport {
     private static final int DEST_CHUNK_RADIUS = 2;
     private static final int VANILLA_PORTAL_COOLDOWN_OVERRIDE = 300;
+    private static final double MAX_RIDER_OFFSET_SQR = 1024.0 * 1024.0;
 
     public static final ConcurrentHashMap<UUID, Entity> lastMovedEntities = new ConcurrentHashMap<>();
 
@@ -478,6 +479,9 @@ public final class PortalTeleport {
                     AeroPortals.LOGGER.warn("[AeroPortals] rider {} not online post-teleport; skipping", rb.playerUuid());
                     continue;
                 }
+                if (p.isPassenger()) {
+                    p.stopRiding();
+                }
                 Vec3 worldFinal = newSubPos.add(rb.localOffset());
                 float yaw = rb.yawDelta() + newYawBase;
                 p.teleportTo(dstLevel, worldFinal.x, worldFinal.y, worldFinal.z,
@@ -490,6 +494,7 @@ public final class PortalTeleport {
             forceClientSync(dstLevel, newSub);
             DeferredClientSyncs.scheduleRetries(server.getTickCount(), dstLevel, newSub);
             PortalCooldown.mark(newSub.getUniqueId(), server.getTickCount());
+            PortalCooldown.suppressUntilLeftPortal(newSub.getUniqueId());
             NeoForge.EVENT_BUS.post(new SubLevelTransferEvent(
                     newSub.getUniqueId(), newSub, srcLevel, dstLevel, translation));
         }
@@ -611,12 +616,29 @@ public final class PortalTeleport {
                     if (s.isAir()) continue;
                     if (s.canBeReplaced()) continue;
                     if (!s.getFluidState().isEmpty()) continue;
-                    if (s.is(Blocks.NETHER_PORTAL) || s.is(Blocks.END_PORTAL) || s.is(Blocks.END_GATEWAY)) continue;
+                    if (s.is(Blocks.END_GATEWAY)) continue;
+                    if (isPortalRelated(dstLevel, cursor)) continue;
                     return Optional.of(cursor.immutable());
                 }
             }
         }
         return Optional.empty();
+    }
+
+    private static boolean isPortalRelated(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (PortalKind.ofBlock(state) != null) return true;
+        if (!isPortalFrameMaterial(state)) return false;
+        for (Direction d : Direction.values()) {
+            if (PortalKind.ofBlock(level.getBlockState(pos.relative(d))) != null) return true;
+        }
+        return false;
+    }
+
+    private static boolean isPortalFrameMaterial(BlockState state) {
+        return state.is(Blocks.OBSIDIAN)
+                || state.is(Blocks.GLOWSTONE)
+                || state.is(Blocks.REINFORCED_DEEPSLATE);
     }
 
     private static Vec3 clampPortalCenterY(ServerLevel dstLevel, Vec3 portalCenter, int portalHeight) {
@@ -675,6 +697,11 @@ public final class PortalTeleport {
             if (e instanceof Player) continue;
             if (EntitySubLevelUtil.shouldKick(e)) continue;
             Vec3 offset = e.position().subtract(subPos);
+            if (offset.lengthSqr() > MAX_RIDER_OFFSET_SQR) {
+                AeroPortals.LOGGER.debug("[AeroPortals] skipping entity {} ({}) - lives in SubLevel-local space, not a world rider (offset {})",
+                        e.getType(), e.getUUID(), offset);
+                continue;
+            }
             float yawDelta = e.getYRot() - subYawNow;
             out.add(new EntityRiderBinding(e.getUUID(), offset, yawDelta, e.getXRot()));
             e.setPortalCooldown(VANILLA_PORTAL_COOLDOWN_OVERRIDE);

@@ -33,7 +33,6 @@ public final class PortalDetector {
 
         for (ServerSubLevel sub : subs) {
             if (sub.isRemoved()) continue;
-            if (PortalCooldown.isOnCooldown(sub.getUniqueId(), now)) continue;
 
             AABB aabb = AabbUtil.worldAabb(sub).inflate(1.0);
             double volume = aabb.getXsize() * aabb.getYsize() * aabb.getZsize();
@@ -43,7 +42,12 @@ public final class PortalDetector {
             }
 
             PortalHit hit = findPortalBlock(level, aabb);
-            if (hit == null) continue;
+            if (hit == null) {
+                PortalCooldown.clearSuppression(sub.getUniqueId());
+                continue;
+            }
+            if (PortalCooldown.isOnCooldown(sub.getUniqueId(), now)) continue;
+            if (PortalCooldown.isSuppressedUntilLeftPortal(sub.getUniqueId())) continue;
 
             switch (hit.kind()) {
                 case NETHER -> {
