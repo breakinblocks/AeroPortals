@@ -159,7 +159,7 @@ public final class TeleportJournal {
         }
 
         AeroPortals.LOGGER.warn("[AeroPortals] journal: recovering lost sub {} into dst {}", subUuid, dstDim);
-        ServerSubLevel recovered = SableBridge.reloadInDestination(srcMinBuildHeight, dstLevel, dstContainer, data);
+        SableBridge.Loaded recovered = SableBridge.reloadInDestination(srcMinBuildHeight, dstLevel, dstContainer, data);
         if (recovered == null) {
             AeroPortals.LOGGER.error("[AeroPortals] journal: fullyLoad failed for sub {}; leaving entry in place for next start", subUuid);
             return;

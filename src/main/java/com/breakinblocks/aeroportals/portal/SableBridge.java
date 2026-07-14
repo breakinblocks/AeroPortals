@@ -1,6 +1,8 @@
 package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.compat.CreateContraptionCompat;
+import com.breakinblocks.aeroportals.compat.SimulatedCompat;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.BoundingBox3i;
@@ -22,6 +24,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.BitSet;
@@ -44,6 +47,10 @@ public final class SableBridge {
             return null;
         }
 
+        List<BlockPos> assembledBearings = CreateContraptionCompat.disassembleAssemblies(srcLevel, src);
+        List<AABB> superGlue = CreateContraptionCompat.captureGlue(srcLevel, src);
+        List<AABB> honeyGlue = SimulatedCompat.captureHoneyGlue(srcLevel, src);
+
         SubLevelData data = SubLevelSerializer.toData(src, List.of());
         AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: snapshotted sub uuid={} bounds={}", data.uuid(), data.bounds());
 
@@ -63,7 +70,7 @@ public final class SableBridge {
         srcContainer.removeSubLevel(src, SubLevelRemovalReason.REMOVED);
         AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: removed source sub-level");
 
-        ServerSubLevel loaded;
+        Loaded loaded;
         try {
             loaded = reloadInDestination(srcLevel.getMinBuildHeight(), dstLevel, dstContainer, data);
         } catch (RuntimeException e) {
@@ -73,12 +80,15 @@ public final class SableBridge {
 
         if (loaded != null) {
             AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: loaded into {} at {}",
-                    dstLevel.dimension().location(), loaded.logicalPose().position());
+                    dstLevel.dimension().location(), loaded.sub().logicalPose().position());
+            CreateContraptionCompat.replayGlue(dstLevel, superGlue, loaded.shift());
+            SimulatedCompat.replayHoneyGlue(dstLevel, honeyGlue, loaded.shift());
+            CreateContraptionCompat.reassemble(dstLevel, assembledBearings, loaded.shift());
             TeleportJournal.delete(srcLevel.getServer(), data.uuid());
-            return loaded;
+            return loaded.sub();
         }
 
-        if (restoreToSource(srcLevel, srcContainer, sourceSnapshot, data.uuid())) {
+        if (restoreToSource(srcLevel, srcContainer, sourceSnapshot, data.uuid(), assembledBearings, superGlue, honeyGlue)) {
             TeleportJournal.delete(srcLevel.getServer(), data.uuid());
         } else {
             AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination load AND source restore failed for sub {}; left in journal for recovery on next start", data.uuid());
@@ -86,10 +96,11 @@ public final class SableBridge {
         return null;
     }
 
-    private static boolean restoreToSource(ServerLevel srcLevel, ServerSubLevelContainer srcContainer, CompoundTag sourceSnapshot, UUID uuid) {
+    private static boolean restoreToSource(ServerLevel srcLevel, ServerSubLevelContainer srcContainer, CompoundTag sourceSnapshot, UUID uuid,
+                                           List<BlockPos> assembledBearings, List<AABB> superGlue, List<AABB> honeyGlue) {
         SubLevelData restoreData = SubLevelSerializer.fromData(sourceSnapshot);
         if (restoreData == null) return false;
-        ServerSubLevel restored;
+        Loaded restored;
         try {
             restored = reloadInDestination(srcLevel.getMinBuildHeight(), srcLevel, srcContainer, restoreData);
         } catch (RuntimeException e) {
@@ -97,15 +108,20 @@ public final class SableBridge {
             return false;
         }
         if (restored == null) return false;
+        CreateContraptionCompat.replayGlue(srcLevel, superGlue, restored.shift());
+        SimulatedCompat.replayHoneyGlue(srcLevel, honeyGlue, restored.shift());
+        CreateContraptionCompat.reassemble(srcLevel, assembledBearings, restored.shift());
         AeroPortals.LOGGER.warn("[AeroPortals] SableBridge: destination load failed; restored sub {} to source {} (teleport cancelled)",
                 uuid, srcLevel.dimension().location());
         return true;
     }
 
-    public static ServerSubLevel reloadInDestination(int srcMinBuildHeight, ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
-        ServerSubLevel loaded = tryLoad(srcMinBuildHeight, dstLevel, dstContainer, data);
+    public record Loaded(ServerSubLevel sub, BlockPos shift) {}
+
+    public static Loaded reloadInDestination(int srcMinBuildHeight, ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
+        Loaded loaded = tryLoad(srcMinBuildHeight, dstLevel, dstContainer, data);
         if (loaded != null) {
-            rebuildPhysicsData(dstLevel, loaded, dstContainer);
+            rebuildPhysicsData(dstLevel, loaded.sub(), dstContainer);
         }
         return loaded;
     }
@@ -144,7 +160,7 @@ public final class SableBridge {
                 sub.getMassTracker().isInvalid(), sub.getMassTracker().getMass());
     }
 
-    private static ServerSubLevel tryLoad(int srcMinBuildHeight, ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
+    private static Loaded tryLoad(int srcMinBuildHeight, ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
         CompoundTag tag = data.fullTag();
         CompoundTag plotTag = tag.getCompound("plot");
         int origPlotX = plotTag.getInt("plot_x");
@@ -182,7 +198,9 @@ public final class SableBridge {
             offsetPlotCoordinates(plotTag, deltaX, deltaY, deltaZ);
         }
 
-        return SubLevelSerializer.fullyLoad(dstLevel, data);
+        ServerSubLevel loaded = SubLevelSerializer.fullyLoad(dstLevel, data);
+        if (loaded == null) return null;
+        return new Loaded(loaded, new BlockPos(deltaX, deltaY, deltaZ));
     }
 
     private static boolean sectionsFitDestination(CompoundTag plotTag, int dstSectionCount) {
