@@ -54,7 +54,7 @@ public final class AeroPortalsCommands {
                 Commands.literal("aeroportals")
                         .requires(src -> src.hasPermission(OP_LEVEL))
                         .then(Commands.literal("teleport")
-                                .then(Commands.argument(ARG_DIMENSION, StringArgumentType.word())
+                                .then(Commands.argument(ARG_DIMENSION, StringArgumentType.greedyString())
                                         .suggests(SUGGEST_DIMENSIONS)
                                         .executes(ctx -> runTeleport(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, ARG_DIMENSION))))));
