@@ -61,7 +61,7 @@ Multiple datapacks merge cleanly, so several mods can add to this tag without st
 
 ## Commands
 
-### `/aeroportals teleport <dimension>` (op only)
+### `/aeroportals teleport <dimension> [x y z]` (op only)
 
 OP-level command (permission level 2). Teleports you and the airship you're riding to the named dimension. Autocompletes the dimensions available to your server:
 
@@ -71,7 +71,9 @@ OP-level command (permission level 2). Teleports you and the airship you're ridi
 - `otherside` when Deeper and Darker is installed
 - You can also type any custom dimension as `namespace:path` directly
 
-The ship lands at a sensible spot in the destination: the obsidian platform for the End, somewhere safe above the surface for everything else.
+Without coordinates, the ship lands at a sensible spot in the destination: the obsidian platform for the End, somewhere safe above the surface for everything else.
+
+Add three coordinates after the dimension to pick the landing spot yourself, for example `/aeroportals teleport kubejs:deep_space -1000 ~ -1000`. Coordinates are absolute positions in the destination dimension; the command does not apply nether-style coordinate scaling to them. Each coordinate also accepts `~` or `~offset`, relative to the spot the command would have picked on its own, so `~ ~ ~` is the same as leaving them off. The Y coordinate is where the bottom of your airship (or your feet, without a ship) ends up. Note that `execute positioned` does not affect this command; use the explicit coordinates instead.
 
 ## For server admins
 
@@ -103,6 +105,7 @@ If an optional mod isn't installed, that integration is simply inactive: no erro
 | `teleport.portal_cooldown_ticks` | `200` | After teleporting, the ship is locked out of portals for this long (in ticks). Prevents a ship from immediately re-teleporting back through the destination portal. |
 | `teleport.dest_portal_search_radius` | `128` | How far AeroPortals looks for an existing matching portal at the destination before deciding to build a new one. |
 | `teleport.generate_matching_portal` | `true` | If `false`, the teleport aborts when no destination portal is found instead of building one. |
+| `teleport.clear_velocity_on_arrival` | `false` | If `true`, ships arrive from a teleport standing still. By default they keep their momentum. |
 
 ### Crash safety
 

@@ -2,6 +2,7 @@ package com.breakinblocks.aeroportals.gametest;
 
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.api.SubLevelTransferEvent;
+import com.breakinblocks.aeroportals.commands.AeroPortalsCommands;
 import com.breakinblocks.aeroportals.events.VanillaPortalCanceller;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
@@ -718,7 +719,7 @@ public class PortalGameTests {
 
     public static final class TransferEventRecorder {
         
-        public record Captured(UUID subUuid, Vec3 translation, ServerLevel src, ServerLevel dst) {}
+        public record Captured(UUID subUuid, Vec3 translation, ServerLevel src, ServerLevel dst, SubLevelTransferEvent event) {}
         public static final ConcurrentHashMap<UUID, Captured> captured =
                 new ConcurrentHashMap<>();
         public static final AtomicInteger count = new AtomicInteger(0);
@@ -731,7 +732,7 @@ public class PortalGameTests {
         @SubscribeEvent
         public static void onTransfer(SubLevelTransferEvent event) {
             count.incrementAndGet();
-            captured.put(event.subUuid(), new Captured(event.subUuid(), event.translation(), event.srcLevel(), event.dstLevel()));
+            captured.put(event.subUuid(), new Captured(event.subUuid(), event.translation(), event.srcLevel(), event.dstLevel(), event));
             AeroPortals.LOGGER.info("[AeroPortals/test] TransferEventRecorder captured: sub={} translation={} {}->{}",
                     event.subUuid(), event.translation(),
                     event.srcLevel().dimension().location(), event.dstLevel().dimension().location());
@@ -1462,6 +1463,42 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
+    @GameTest(template = EMPTY, timeoutTicks = 100)
+    public static void command_parseDestination_coordinateForms(GameTestHelper helper) {
+        var plain = AeroPortalsCommands.parseDestination("kubejs:deep_space");
+        if (!plain.dimensionPart().equals("kubejs:deep_space") || plain.hasCoords()) {
+            helper.fail("plain dimension parse wrong: " + plain);
+            return;
+        }
+
+        var coords = AeroPortalsCommands.parseDestination("kubejs:deep_space -1000 ~ -1000");
+        if (!coords.dimensionPart().equals("kubejs:deep_space") || !coords.hasCoords()) {
+            helper.fail("dimension with coords parse wrong: " + coords);
+            return;
+        }
+        if (coords.x().relative() || coords.x().value() != -1000.0
+                || !coords.y().relative() || coords.y().value() != 0.0
+                || coords.z().relative() || coords.z().value() != -1000.0) {
+            helper.fail("coord specs wrong: " + coords);
+            return;
+        }
+
+        var multiWord = AeroPortalsCommands.parseDestination("deep space -5 ~2.5 7");
+        if (!multiWord.dimensionPart().equals("deep space") || !multiWord.hasCoords()
+                || !multiWord.y().relative() || multiWord.y().value() != 2.5) {
+            helper.fail("multi-word dimension with coords parse wrong: " + multiWord);
+            return;
+        }
+
+        var words = AeroPortalsCommands.parseDestination("some dimension name here");
+        if (!words.dimensionPart().equals("some dimension name here") || words.hasCoords()) {
+            helper.fail("multi-word dimension without coords parse wrong: " + words);
+            return;
+        }
+
+        helper.succeed();
+    }
+
     @GameTest(template = EMPTY, timeoutTicks = 200)
     public static void teleport_abortsWhenLandingBlockedByNetherrack(GameTestHelper helper) {
         ServerLevel srcLevel = helper.getLevel();
@@ -1937,6 +1974,84 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void subLevelTransferEvent_plotShiftRemapsOldPlotPositions(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
+        if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
+
+        NeoForge.EVENT_BUS.register(TransferEventRecorder.class);
+
+        UUID[] subUuidRef = new UUID[1];
+        int[] occupiedIndexRef = new int[]{-1};
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.SPAWNER.defaultBlockState());
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    subUuidRef[0] = sub.getUniqueId();
+
+                    BlockPos oldPlotBlock = findSpawnerInPlot(srcLevel, sub);
+                    if (oldPlotBlock == null) { helper.fail("spawner missing from plot pre-teleport"); return; }
+
+                    var origin = dstContainer.getOrigin();
+                    int localPlotX = sub.getPlot().plotPos.x - origin.x;
+                    int localPlotZ = sub.getPlot().plotPos.z - origin.y;
+                    occupiedIndexRef[0] = dstContainer.getIndex(localPlotX, localPlotZ);
+                    dstContainer.getOccupancy().set(occupiedIndexRef[0]);
+
+                    Vec3 dstWorld = new Vec3(worldPos.getX() / 8.0 + 4096.0, 128.0, worldPos.getZ() / 8.0 + 4096.0);
+                    PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld, false, "test_plotshift");
+                    if (occupiedIndexRef[0] >= 0) dstContainer.getOccupancy().clear(occupiedIndexRef[0]);
+
+                    TransferEventRecorder.Captured captured = TransferEventRecorder.captured.get(subUuidRef[0]);
+                    if (captured == null) { helper.fail("transfer event did not fire"); return; }
+                    SubLevelTransferEvent event = captured.event();
+
+                    BlockPos shift = event.plotShift();
+                    if (shift.getX() == 0 && shift.getZ() == 0) {
+                        helper.fail("plot was forced occupied, expected a nonzero XZ plot shift, got " + shift);
+                        return;
+                    }
+                    if (event.chainPlotMoves().isEmpty()) {
+                        helper.fail("chainPlotMoves is empty");
+                        return;
+                    }
+
+                    BlockPos remapped = event.remapPlotPos(oldPlotBlock);
+                    if (remapped.equals(oldPlotBlock)) {
+                        helper.fail("remapPlotPos left an old-plot position unchanged despite relocation");
+                        return;
+                    }
+                    if (!remapped.equals(oldPlotBlock.offset(shift))) {
+                        helper.fail("remapPlotPos returned " + remapped + ", expected " + oldPlotBlock.offset(shift));
+                        return;
+                    }
+                    if (!dstLevel.getBlockState(remapped).is(Blocks.SPAWNER)) {
+                        helper.fail("no spawner at remapped position " + remapped + " in dst dim");
+                        return;
+                    }
+
+                    BlockPos outside = new BlockPos(12, 70, 34);
+                    if (!event.remapPlotPos(outside).equals(outside)) {
+                        helper.fail("remapPlotPos changed a position outside the old plot region");
+                        return;
+                    }
+                })
+                .thenSucceed();
+    }
+
     private static BlockPos findSpawnerInPlot(ServerLevel level, ServerSubLevel sub) {
         var bounds = sub.getPlot().getBoundingBox();
         if (bounds == BoundingBox3i.EMPTY) return null;
@@ -2039,7 +2154,7 @@ public class PortalGameTests {
                     int side = 1 << dstContainer.getLogSideLength();
                     occ.set(0, side * side);
 
-                    ServerSubLevel result;
+                    SableBridge.Moved result;
                     try {
                         result = SableBridge.moveAcrossDimensions(sub, srcLevel, dstLevel,
                                 new Vec3(worldPos.getX() + 0.5, worldPos.getY() + 0.5, worldPos.getZ() + 0.5));

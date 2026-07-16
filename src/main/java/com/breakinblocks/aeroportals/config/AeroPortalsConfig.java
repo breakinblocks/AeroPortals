@@ -12,6 +12,7 @@ public final class AeroPortalsConfig {
     public static final ModConfigSpec.IntValue DEST_PORTAL_SEARCH_RADIUS;
     public static final ModConfigSpec.BooleanValue GENERATE_MATCHING_PORTAL;
     public static final ModConfigSpec.BooleanValue MATCH_PLAYER_PORTAL_SIZE;
+    public static final ModConfigSpec.BooleanValue CLEAR_VELOCITY_ON_ARRIVAL;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -41,6 +42,9 @@ public final class AeroPortalsConfig {
         MATCH_PLAYER_PORTAL_SIZE = builder
                 .comment("If true, when a player travels on foot and a new destination portal is created, enlarge it to match the size of the portal they entered.")
                 .define("match_player_portal_size", true);
+        CLEAR_VELOCITY_ON_ARRIVAL = builder
+                .comment("If true, airships arrive from a teleport with all momentum removed. If false, they keep their velocity, subject to Sable's velocity retention setting.")
+                .define("clear_velocity_on_arrival", false);
         builder.pop();
 
         SPEC = builder.build();

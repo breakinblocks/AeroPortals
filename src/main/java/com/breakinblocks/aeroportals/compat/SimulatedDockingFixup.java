@@ -30,10 +30,9 @@ public final class SimulatedDockingFixup {
         if (!resolveReflectionTargets()) return;
 
         ServerSubLevel sub = event.newSub();
-        BlockPos translation = BlockPos.containing(event.translation());
-        int updated = translateDockingPositions(sub, translation);
+        int updated = remapDockingPositions(sub, event);
         if (updated > 0) {
-            AeroPortals.LOGGER.debug("[AeroPortals] translated {} Simulated docking-connector position(s) on sub {}",
+            AeroPortals.LOGGER.debug("[AeroPortals] remapped {} Simulated docking-connector position(s) on sub {}",
                     updated, event.subUuid());
         }
     }
@@ -60,7 +59,7 @@ public final class SimulatedDockingFixup {
         }
     }
 
-    private static int translateDockingPositions(ServerSubLevel sub, BlockPos translation) {
+    private static int remapDockingPositions(ServerSubLevel sub, SubLevelTransferEvent event) {
         int updated = 0;
         for (var chunkHolder : sub.getPlot().getLoadedChunks()) {
             LevelChunk chunk = chunkHolder.getChunk();
@@ -69,11 +68,12 @@ public final class SimulatedDockingFixup {
                 try {
                     BlockPos current = (BlockPos) otherPosField.get(be);
                     if (current == null) continue;
-                    BlockPos translated = current.offset(translation);
-                    otherPosField.set(be, translated);
+                    BlockPos remapped = event.remapPlotPos(current);
+                    if (remapped.equals(current)) continue;
+                    otherPosField.set(be, remapped);
                     be.setChanged();
                     AeroPortals.LOGGER.debug("[AeroPortals] DockingConnectorBlockEntity @ {} otherConnectorPosition: {} -> {}",
-                            be.getBlockPos(), current, translated);
+                            be.getBlockPos(), current, remapped);
                     updated++;
                 } catch (IllegalAccessException ex) {
                     AeroPortals.LOGGER.error("[AeroPortals] failed to access {}: {}", OTHER_POS_FIELD, ex.getMessage());

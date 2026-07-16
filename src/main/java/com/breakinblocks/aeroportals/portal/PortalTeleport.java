@@ -456,19 +456,25 @@ public final class PortalTeleport {
             plans.add(new SubMovePlan(pm.sub, pm.srcPos, pm.dstPos, chainRiders, chainEntities));
         }
 
-        Map<SubMovePlan, ServerSubLevel> moved = new IdentityHashMap<>();
+        Map<SubMovePlan, SableBridge.Moved> moved = new IdentityHashMap<>();
         for (SubMovePlan plan : plans) {
-            ServerSubLevel newSub = SableBridge.moveAcrossDimensions(plan.srcSub, srcLevel, dstLevel, plan.dstPos);
-            if (newSub == null) {
+            SableBridge.Moved move = SableBridge.moveAcrossDimensions(plan.srcSub, srcLevel, dstLevel, plan.dstPos);
+            if (move == null) {
                 AeroPortals.LOGGER.error("[AeroPortals] SableBridge returned null for chained sub {}; chain may be partially broken", plan.srcSub.getUniqueId());
                 continue;
             }
-            moved.put(plan, newSub);
+            moved.put(plan, move);
         }
 
-        for (Map.Entry<SubMovePlan, ServerSubLevel> e : moved.entrySet()) {
+        List<SubLevelTransferEvent.PlotMove> chainPlotMoves = new ArrayList<>(moved.size());
+        for (SableBridge.Moved move : moved.values()) {
+            chainPlotMoves.add(new SubLevelTransferEvent.PlotMove(
+                    move.sub().getUniqueId(), move.oldRegionMin(), move.regionBlocks(), move.shift()));
+        }
+
+        for (Map.Entry<SubMovePlan, SableBridge.Moved> e : moved.entrySet()) {
             SubMovePlan plan = e.getKey();
-            ServerSubLevel newSub = e.getValue();
+            ServerSubLevel newSub = e.getValue().sub();
             Pose3dc newPose = newSub.logicalPose();
             float newYawBase = (float) YawMath.yawFromOrientation(newPose.orientation());
             Vec3 newSubPos = subWorldPos(newPose);
@@ -491,12 +497,13 @@ public final class PortalTeleport {
             }
 
             replayEntityRiders(srcLevel, dstLevel, newSub, plan.entityRiders);
-            forceClientSync(dstLevel, newSub);
+            forceClientSync(dstLevel, newSub, AeroPortalsConfig.CLEAR_VELOCITY_ON_ARRIVAL.get());
             DeferredClientSyncs.scheduleRetries(server.getTickCount(), dstLevel, newSub);
             PortalCooldown.mark(newSub.getUniqueId(), server.getTickCount());
             PortalCooldown.suppressUntilLeftPortal(newSub.getUniqueId(), newSubPos);
             NeoForge.EVENT_BUS.post(new SubLevelTransferEvent(
-                    newSub.getUniqueId(), newSub, srcLevel, dstLevel, translation));
+                    newSub.getUniqueId(), newSub, srcLevel, dstLevel, translation,
+                    e.getValue().shift(), chainPlotMoves));
         }
 
         AeroPortals.LOGGER.debug("[AeroPortals] {} teleport complete; moved {}/{} sub(s) from chain",
@@ -512,14 +519,17 @@ public final class PortalTeleport {
             List<RiderBinding> riders,
             List<EntityRiderBinding> entityRiders) {}
 
-    static void forceClientSync(ServerLevel dstLevel, ServerSubLevel sub) {
+    static void forceClientSync(ServerLevel dstLevel, ServerSubLevel sub, boolean clearVelocity) {
         ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
         if (dstContainer == null) return;
         PhysicsPipeline pipeline = dstContainer.physicsSystem().getPipeline();
         Pose3dc pose = sub.logicalPose();
-        pipeline.resetVelocity(sub);
+        if (clearVelocity) {
+            pipeline.resetVelocity(sub);
+        }
         pipeline.teleport(sub, pose.position(), pose.orientation());
-        AeroPortals.LOGGER.debug("[AeroPortals] forced client-sync for sub {} at {}", sub.getUniqueId(), pose.position());
+        AeroPortals.LOGGER.debug("[AeroPortals] forced client-sync for sub {} at {} (clearVelocity={})",
+                sub.getUniqueId(), pose.position(), clearVelocity);
     }
 
     public static final class DeferredClientSyncs {
@@ -542,7 +552,7 @@ public final class PortalTeleport {
                     Pending p = it.next();
                     if (p.targetTick > currentTick) continue;
                     if (!p.sub.isRemoved()) {
-                        forceClientSync(p.level, p.sub);
+                        forceClientSync(p.level, p.sub, false);
                         fireCount.incrementAndGet();
                     }
                     it.remove();

@@ -20,6 +20,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -34,7 +35,9 @@ import java.util.UUID;
 public final class SableBridge {
     private SableBridge() {}
 
-    public static ServerSubLevel moveAcrossDimensions(
+    public record Moved(ServerSubLevel sub, BlockPos shift, BlockPos oldRegionMin, int regionBlocks) {}
+
+    public static Moved moveAcrossDimensions(
             ServerSubLevel src,
             ServerLevel srcLevel,
             ServerLevel dstLevel,
@@ -46,6 +49,11 @@ public final class SableBridge {
             AeroPortals.LOGGER.error("[AeroPortals] SableBridge: missing container src={} dst={}", srcContainer, dstContainer);
             return null;
         }
+
+        int regionBits = srcContainer.getLogPlotSize() + 4;
+        ChunkPos oldPlotPos = src.getPlot().plotPos;
+        BlockPos oldRegionMin = new BlockPos(oldPlotPos.x << regionBits, srcLevel.getMinBuildHeight(), oldPlotPos.z << regionBits);
+        int regionBlocks = 1 << regionBits;
 
         List<BlockPos> assembledBearings = CreateContraptionCompat.disassembleAssemblies(srcLevel, src);
         List<AABB> superGlue = CreateContraptionCompat.captureGlue(srcLevel, src);
@@ -85,7 +93,7 @@ public final class SableBridge {
             SimulatedCompat.replayHoneyGlue(dstLevel, honeyGlue, loaded.shift());
             CreateContraptionCompat.reassemble(dstLevel, assembledBearings, loaded.shift());
             TeleportJournal.delete(srcLevel.getServer(), data.uuid());
-            return loaded.sub();
+            return new Moved(loaded.sub(), loaded.shift(), oldRegionMin, regionBlocks);
         }
 
         if (restoreToSource(srcLevel, srcContainer, sourceSnapshot, data.uuid(), assembledBearings, superGlue, honeyGlue)) {

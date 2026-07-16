@@ -34,6 +34,7 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
@@ -90,9 +91,10 @@ public final class AeroPortalsCommands {
         }
 
         MinecraftServer server = source.getServer();
-        ResourceKey<Level> dstKey = resolveDimensionKey(dimensionArg);
+        ParsedDestination dest = parseDestination(dimensionArg);
+        ResourceKey<Level> dstKey = resolveDimensionKey(dest.dimensionPart());
         if (dstKey == null) {
-            source.sendFailure(Component.literal("Unknown destination dimension: " + dimensionArg));
+            source.sendFailure(Component.literal("Unknown destination dimension: " + dest.dimensionPart()));
             return 0;
         }
         ServerLevel dstLevel = server.getLevel(dstKey);
@@ -108,16 +110,16 @@ public final class AeroPortalsCommands {
 
         SubLevel tracking = Sable.HELPER.getTrackingSubLevel(player);
         if (tracking instanceof ServerSubLevel sub && !sub.isRemoved()) {
-            Vec3 dstWorld = chooseLandingForSub(srcLevel, dstLevel, sub, dimensionArg);
+            Vec3 dstWorld = chooseLandingForSub(srcLevel, dstLevel, sub, dest);
             source.sendSuccess(() -> Component.literal(
                     "AeroPortals: teleporting your airship and you to " + dstKey.location()
                             + " at " + formatVec(dstWorld)), true);
             PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld,
-                    true, "command:" + dimensionArg);
+                    true, "command:" + dest.dimensionPart());
             return 1;
         }
 
-        Vec3 dstPos = chooseLandingForPlayer(srcLevel, dstLevel, player, dimensionArg);
+        Vec3 dstPos = chooseLandingForPlayer(srcLevel, dstLevel, player, dest);
         ResourceKey<Level> dstKeyFinal = dstKey;
         source.sendSuccess(() -> Component.literal(
                 "AeroPortals: teleporting you to " + dstKeyFinal.location()
@@ -148,8 +150,8 @@ public final class AeroPortalsCommands {
         };
     }
 
-    private static Vec3 chooseLandingForSub(ServerLevel srcLevel, ServerLevel dstLevel, ServerSubLevel sub, String dimensionArg) {
-        if (dstLevel.dimension() == Level.END) {
+    private static Vec3 chooseLandingForSub(ServerLevel srcLevel, ServerLevel dstLevel, ServerSubLevel sub, ParsedDestination dest) {
+        if (dstLevel.dimension() == Level.END && !dest.hasCoords()) {
             EndPortalLanding.ensurePlatform(dstLevel);
             return EndPortalLanding.landingPosition(sub);
         }
@@ -158,18 +160,19 @@ public final class AeroPortalsCommands {
         double ratio = srcDim.coordinateScale() / dstDim.coordinateScale();
         double subX = sub.logicalPose().position().x();
         double subZ = sub.logicalPose().position().z();
-        int dstX = (int) Math.round(subX * ratio);
-        int dstZ = (int) Math.round(subZ * ratio);
-        int surface = dstLevel.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, dstX, dstZ);
-        int targetMinY = surface + 1;
+        double dstX = resolveCoord(dest.x(), Math.round(subX * ratio) + 0.5);
+        double dstZ = resolveCoord(dest.z(), Math.round(subZ * ratio) + 0.5);
+        int surface = dstLevel.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                (int) Math.floor(dstX), (int) Math.floor(dstZ));
+        double targetMinY = resolveCoord(dest.y(), surface + 1);
         AABB aabb = AabbUtil.worldAabb(sub);
         double minYOffsetFromPose = aabb.minY - sub.logicalPose().position().y();
         double dstY = targetMinY - minYOffsetFromPose;
-        return new Vec3(dstX + 0.5, dstY, dstZ + 0.5);
+        return new Vec3(dstX, dstY, dstZ);
     }
 
-    private static Vec3 chooseLandingForPlayer(ServerLevel srcLevel, ServerLevel dstLevel, ServerPlayer player, String dimensionArg) {
-        if (dstLevel.dimension() == Level.END) {
+    private static Vec3 chooseLandingForPlayer(ServerLevel srcLevel, ServerLevel dstLevel, ServerPlayer player, ParsedDestination dest) {
+        if (dstLevel.dimension() == Level.END && !dest.hasCoords()) {
             EndPortalLanding.ensurePlatform(dstLevel);
             return new Vec3(EndPortalLanding.PLATFORM_CENTRE.getX() + 0.5,
                     EndPortalLanding.LANDING_Y,
@@ -178,10 +181,57 @@ public final class AeroPortalsCommands {
         DimensionType srcDim = srcLevel.dimensionType();
         DimensionType dstDim = dstLevel.dimensionType();
         double ratio = srcDim.coordinateScale() / dstDim.coordinateScale();
-        int dstX = (int) Math.round(player.getX() * ratio);
-        int dstZ = (int) Math.round(player.getZ() * ratio);
-        int surface = dstLevel.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, dstX, dstZ);
-        return new Vec3(dstX + 0.5, surface + 1, dstZ + 0.5);
+        double dstX = resolveCoord(dest.x(), Math.round(player.getX() * ratio) + 0.5);
+        double dstZ = resolveCoord(dest.z(), Math.round(player.getZ() * ratio) + 0.5);
+        int surface = dstLevel.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
+                (int) Math.floor(dstX), (int) Math.floor(dstZ));
+        double dstY = resolveCoord(dest.y(), surface + 1);
+        return new Vec3(dstX, dstY, dstZ);
+    }
+
+    public record CoordSpec(boolean relative, double value) {}
+
+    public record ParsedDestination(String dimensionPart, CoordSpec x, CoordSpec y, CoordSpec z) {
+        public boolean hasCoords() {
+            return this.x != null;
+        }
+    }
+
+    public static ParsedDestination parseDestination(String arg) {
+        String trimmed = arg.trim();
+        String[] tokens = trimmed.split("\\s+");
+        if (tokens.length >= 4) {
+            CoordSpec x = parseCoordSpec(tokens[tokens.length - 3]);
+            CoordSpec y = parseCoordSpec(tokens[tokens.length - 2]);
+            CoordSpec z = parseCoordSpec(tokens[tokens.length - 1]);
+            if (x != null && y != null && z != null) {
+                String dimensionPart = String.join(" ", Arrays.copyOfRange(tokens, 0, tokens.length - 3));
+                return new ParsedDestination(dimensionPart, x, y, z);
+            }
+        }
+        return new ParsedDestination(trimmed, null, null, null);
+    }
+
+    private static CoordSpec parseCoordSpec(String token) {
+        String numberPart = token;
+        boolean relative = false;
+        if (token.startsWith("~")) {
+            relative = true;
+            numberPart = token.substring(1);
+            if (numberPart.isEmpty()) return new CoordSpec(true, 0.0);
+        }
+        try {
+            double value = Double.parseDouble(numberPart);
+            if (!Double.isFinite(value)) return null;
+            return new CoordSpec(relative, value);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
+    private static double resolveCoord(CoordSpec spec, double fallback) {
+        if (spec == null) return fallback;
+        return spec.relative() ? fallback + spec.value() : spec.value();
     }
 
     private static String formatVec(Vec3 v) {
