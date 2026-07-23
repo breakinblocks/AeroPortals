@@ -26,7 +26,6 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.RelativeMovement;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.dimension.DimensionType;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -162,8 +161,7 @@ public final class AeroPortalsCommands {
         double subZ = sub.logicalPose().position().z();
         double dstX = resolveCoord(dest.x(), Math.round(subX * ratio) + 0.5);
         double dstZ = resolveCoord(dest.z(), Math.round(subZ * ratio) + 0.5);
-        int surface = dstLevel.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                (int) Math.floor(dstX), (int) Math.floor(dstZ));
+        int surface = PortalTeleport.loadedSurfaceY(dstLevel, (int) Math.floor(dstX), (int) Math.floor(dstZ));
         double targetMinY = resolveCoord(dest.y(), surface + 1);
         AABB aabb = AabbUtil.worldAabb(sub);
         double minYOffsetFromPose = aabb.minY - sub.logicalPose().position().y();
@@ -183,8 +181,7 @@ public final class AeroPortalsCommands {
         double ratio = srcDim.coordinateScale() / dstDim.coordinateScale();
         double dstX = resolveCoord(dest.x(), Math.round(player.getX() * ratio) + 0.5);
         double dstZ = resolveCoord(dest.z(), Math.round(player.getZ() * ratio) + 0.5);
-        int surface = dstLevel.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES,
-                (int) Math.floor(dstX), (int) Math.floor(dstZ));
+        int surface = PortalTeleport.loadedSurfaceY(dstLevel, (int) Math.floor(dstX), (int) Math.floor(dstZ));
         double dstY = resolveCoord(dest.y(), surface + 1);
         return new Vec3(dstX, dstY, dstZ);
     }

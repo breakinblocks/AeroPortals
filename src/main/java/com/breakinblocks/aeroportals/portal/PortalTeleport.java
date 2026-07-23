@@ -373,9 +373,14 @@ public final class PortalTeleport {
         return new Vec3(warpPos.getX() + 0.5, dstY, warpPos.getZ() + 0.5);
     }
 
+    public static int loadedSurfaceY(ServerLevel level, int x, int z) {
+        level.getChunk(x >> 4, z >> 4);
+        return level.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, x, z);
+    }
+
     private static Vec3 overworldSpawnLanding(ServerLevel overworld, ServerSubLevel sub) {
         BlockPos spawn = overworld.getSharedSpawnPos();
-        int safeY = overworld.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, spawn.getX(), spawn.getZ());
+        int safeY = loadedSurfaceY(overworld, spawn.getX(), spawn.getZ());
         AABB aabb = AabbUtil.worldAabb(sub);
         Vec3 subPos = subWorldPos(sub.logicalPose());
         double dstY = (safeY + 1) - (aabb.minY - subPos.y);

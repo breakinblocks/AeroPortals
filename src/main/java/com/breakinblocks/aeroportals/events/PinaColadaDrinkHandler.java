@@ -11,13 +11,15 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.RelativeMovement;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.living.LivingEntityUseItemEvent;
+
+import java.util.Set;
 
 @EventBusSubscriber(modid = AeroPortals.MOD_ID)
 public final class PinaColadaDrinkHandler {
@@ -32,9 +34,6 @@ public final class PinaColadaDrinkHandler {
         if (!(entity instanceof ServerPlayer player)) return;
         if (!TropicraftCompat.isPinaColada(event.getItem())) return;
 
-        SubLevel tracking = Sable.HELPER.getTrackingSubLevel(player);
-        if (!(tracking instanceof ServerSubLevel sub) || sub.isRemoved()) return;
-
         ResourceKey<Level> dstKey = TropicraftCompat.tropicsDimension();
         if (dstKey == null) return;
         ServerLevel srcLevel = player.serverLevel();
@@ -48,11 +47,30 @@ public final class PinaColadaDrinkHandler {
             if (dstLevel == null) return;
         }
 
-        Vec3 dstWorld = landingAtPlayerColumn(srcLevel, dstLevel, sub);
-        AeroPortals.LOGGER.debug("[AeroPortals] pina colada hook: player {} on sub {} drank pina colada in {} -> teleporting to {} at {}",
-                player.getGameProfile().getName(), sub.getUniqueId(),
-                srcLevel.dimension().location(), dstLevel.dimension().location(), dstWorld);
-        PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld, true, "pina_colada");
+        SubLevel tracking = Sable.HELPER.getTrackingSubLevel(player);
+        if (tracking instanceof ServerSubLevel sub && !sub.isRemoved()) {
+            Vec3 dstWorld = landingAtPlayerColumn(srcLevel, dstLevel, sub);
+            AeroPortals.LOGGER.debug("[AeroPortals] pina colada hook: player {} on sub {} drank pina colada in {} -> teleporting to {} at {}",
+                    player.getGameProfile().getName(), sub.getUniqueId(),
+                    srcLevel.dimension().location(), dstLevel.dimension().location(), dstWorld);
+            PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld, true, "pina_colada");
+            return;
+        }
+
+        Vec3 dstPos = playerColumnLanding(srcLevel, dstLevel, player);
+        AeroPortals.LOGGER.debug("[AeroPortals] pina colada hook: player {} (no airship) drank pina colada in {} -> teleporting to {} at {}",
+                player.getGameProfile().getName(),
+                srcLevel.dimension().location(), dstLevel.dimension().location(), dstPos);
+        player.teleportTo(dstLevel, dstPos.x, dstPos.y, dstPos.z,
+                Set.<RelativeMovement>of(), player.getYRot(), player.getXRot());
+    }
+
+    private static Vec3 playerColumnLanding(ServerLevel srcLevel, ServerLevel dstLevel, ServerPlayer player) {
+        double ratio = srcLevel.dimensionType().coordinateScale() / dstLevel.dimensionType().coordinateScale();
+        double dstX = Math.round(player.getX() * ratio) + 0.5;
+        double dstZ = Math.round(player.getZ() * ratio) + 0.5;
+        int surface = PortalTeleport.loadedSurfaceY(dstLevel, (int) Math.floor(dstX), (int) Math.floor(dstZ));
+        return new Vec3(dstX, surface + 1, dstZ);
     }
 
     private static Vec3 landingAtPlayerColumn(ServerLevel srcLevel, ServerLevel dstLevel, ServerSubLevel sub) {
@@ -61,7 +79,7 @@ public final class PinaColadaDrinkHandler {
         double subZ = sub.logicalPose().position().z();
         int dstX = (int) Math.round(subX * ratio);
         int dstZ = (int) Math.round(subZ * ratio);
-        int surface = dstLevel.getHeight(Heightmap.Types.MOTION_BLOCKING_NO_LEAVES, dstX, dstZ);
+        int surface = PortalTeleport.loadedSurfaceY(dstLevel, dstX, dstZ);
         int targetMinY = surface + 1;
         AABB aabb = AabbUtil.worldAabb(sub);
         double minYOffsetFromPose = aabb.minY - sub.logicalPose().position().y();
