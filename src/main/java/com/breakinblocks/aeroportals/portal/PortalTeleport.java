@@ -45,6 +45,7 @@ import net.minecraft.world.level.portal.DimensionTransition;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
+import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
 import java.util.ArrayList;
@@ -111,6 +112,45 @@ public final class PortalTeleport {
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
         executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "nether");
+    }
+
+    public static void jumpOnboardNetherPortal(ServerLevel srcLevel, ServerSubLevel sub, PortalRect plotRect) {
+        MinecraftServer server = srcLevel.getServer();
+        ResourceKey<Level> dstKey = (srcLevel.dimension() == Level.NETHER) ? Level.OVERWORLD : Level.NETHER;
+        ServerLevel dstLevel = server.getLevel(dstKey);
+        if (dstLevel == null) {
+            AeroPortals.LOGGER.warn("[AeroPortals] onboard jump: destination dimension {} not loaded; aborting", dstKey.location());
+            return;
+        }
+
+        double ratio = srcLevel.dimensionType().coordinateScale() / dstLevel.dimensionType().coordinateScale();
+
+        Vec3 srcWorld = subWorldPos(sub.logicalPose());
+        Vec3 localCenter = plotRect.centerWorld();
+        Vector3d transformed = sub.logicalPose().transformPosition(new Vector3d(localCenter.x, localCenter.y, localCenter.z));
+        Vec3 srcPortalCenter = new Vec3(transformed.x(), transformed.y(), transformed.z());
+        Vec3 subOffsetFromPortal = srcWorld.subtract(srcPortalCenter);
+
+        Vec3 scaledPortalCenter = clampToWorldBorder(dstLevel,
+                new Vec3(srcPortalCenter.x * ratio, srcPortalCenter.y, srcPortalCenter.z * ratio));
+        scaledPortalCenter = clampPortalCenterY(dstLevel, scaledPortalCenter, plotRect.height());
+
+        BlockPos searchCenter = BlockPos.containing(scaledPortalCenter);
+        ensureChunksLoaded(dstLevel, searchCenter);
+
+        DestinationResolution resolved = resolveDestinationPortal(dstLevel, plotRect, searchCenter);
+        if (resolved == null) {
+            AeroPortals.LOGGER.error("[AeroPortals] onboard jump: could not resolve destination portal; aborting");
+            return;
+        }
+        PortalRect dstRect = resolved.rect();
+        Vec3 dstWorld = pushClearOfPortalPlane(sub, srcWorld, dstRect, dstRect.centerWorld().add(subOffsetFromPortal));
+
+        AeroPortals.LOGGER.debug("[AeroPortals] onboard jump: src dim={} subPos={} portalWorldCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, generated={})",
+                srcLevel.dimension().location(), srcWorld, srcPortalCenter,
+                dstKey.location(), dstRect.centerWorld(), dstWorld, ratio, resolved.generated());
+
+        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "onboard-portal");
     }
 
     public static void teleportEnd(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {

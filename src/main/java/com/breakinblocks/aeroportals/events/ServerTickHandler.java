@@ -5,6 +5,7 @@ import com.breakinblocks.aeroportals.compat.Ae2SpatialCompat;
 import com.breakinblocks.aeroportals.compat.ForgivingWorldCompat;
 import com.breakinblocks.aeroportals.compat.SpdStackCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
+import com.breakinblocks.aeroportals.portal.OnboardPortalJump;
 import com.breakinblocks.aeroportals.portal.PortalDetector;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.portal.TeleportJournal;
@@ -42,6 +43,7 @@ public final class ServerTickHandler {
 
         for (ServerLevel level : server.getAllLevels()) {
             PortalDetector.scan(level);
+            OnboardPortalJump.scan(level);
             SpdStackCompat.scan(level);
             ForgivingWorldCompat.scan(level);
         }
