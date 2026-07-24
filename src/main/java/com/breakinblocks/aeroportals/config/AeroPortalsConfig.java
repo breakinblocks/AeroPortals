@@ -13,6 +13,7 @@ public final class AeroPortalsConfig {
     public static final ModConfigSpec.BooleanValue GENERATE_MATCHING_PORTAL;
     public static final ModConfigSpec.BooleanValue MATCH_PLAYER_PORTAL_SIZE;
     public static final ModConfigSpec.BooleanValue CLEAR_VELOCITY_ON_ARRIVAL;
+    public static final ModConfigSpec.BooleanValue CLEAR_DESTINATION_BLOCKS;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -45,6 +46,9 @@ public final class AeroPortalsConfig {
         CLEAR_VELOCITY_ON_ARRIVAL = builder
                 .comment("If true, airships arrive from a teleport with all momentum removed. If false, they keep their velocity, subject to Sable's velocity retention setting.")
                 .define("clear_velocity_on_arrival", false);
+        CLEAR_DESTINATION_BLOCKS = builder
+                .comment("DESTRUCTIVE: if true, blocks that would overlap the arriving airship are destroyed (without drops) to make room, instead of cancelling the teleport. Portal blocks, portal frames, and unbreakable blocks are never destroyed.")
+                .define("clear_destination_blocks", false);
         builder.pop();
 
         SPEC = builder.build();

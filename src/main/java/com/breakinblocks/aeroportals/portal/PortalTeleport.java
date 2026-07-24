@@ -103,7 +103,7 @@ public final class PortalTeleport {
         PortalRect dstRect = resolved.rect();
 
         Vec3 dstPortalCenter = dstRect.centerWorld();
-        Vec3 dstWorld = dstPortalCenter.add(subOffsetFromPortal);
+        Vec3 dstWorld = pushClearOfPortalPlane(sub, srcWorld, dstRect, dstPortalCenter.add(subOffsetFromPortal));
 
         AeroPortals.LOGGER.debug("[AeroPortals] nether teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
                 srcLevel.dimension().location(), srcWorld, srcPortalCenter,
@@ -182,7 +182,7 @@ public final class PortalTeleport {
         }
         PortalRect dstRect = resolved.rect();
         Vec3 dstPortalCenter = dstRect.centerWorld();
-        Vec3 dstWorld = dstPortalCenter.add(subOffsetFromPortal);
+        Vec3 dstWorld = pushClearOfPortalPlane(sub, srcWorld, dstRect, dstPortalCenter.add(subOffsetFromPortal));
 
         AeroPortals.LOGGER.debug("[AeroPortals] aether teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
                 srcLevel.dimension().location(), srcWorld, srcPortalCenter,
@@ -270,7 +270,7 @@ public final class PortalTeleport {
         }
         PortalRect dstRect = resolved.rect();
         Vec3 dstPortalCenter = dstRect.centerWorld();
-        Vec3 dstWorld = dstPortalCenter.add(subOffsetFromPortal);
+        Vec3 dstWorld = pushClearOfPortalPlane(sub, srcWorld, dstRect, dstPortalCenter.add(subOffsetFromPortal));
 
         AeroPortals.LOGGER.debug("[AeroPortals] deeperdarker teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
                 srcLevel.dimension().location(), srcWorld, srcPortalCenter,
@@ -399,6 +399,34 @@ public final class PortalTeleport {
         executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "create_teleporters");
     }
 
+    private static final double PORTAL_EXIT_CLEARANCE = 1.5;
+
+    private static Vec3 pushClearOfPortalPlane(ServerSubLevel sub, Vec3 srcWorld, PortalRect dstRect, Vec3 dstWorld) {
+        AABB aabb = AabbUtil.worldAabb(sub);
+        boolean normalIsZ = dstRect.axis() == Direction.Axis.X;
+        Vec3 dstPortalCenter = dstRect.centerWorld();
+        double plane = normalIsZ ? dstPortalCenter.z : dstPortalCenter.x;
+        double subCoord = normalIsZ ? dstWorld.z : dstWorld.x;
+        double offMin = (normalIsZ ? aabb.minZ : aabb.minX) - (normalIsZ ? srcWorld.z : srcWorld.x);
+        double offMax = (normalIsZ ? aabb.maxZ : aabb.maxX) - (normalIsZ ? srcWorld.z : srcWorld.x);
+        double sign = Math.signum(subCoord - plane);
+        if (sign == 0) sign = 1;
+
+        double adjusted;
+        if (sign > 0) {
+            adjusted = Math.max(subCoord, plane + PORTAL_EXIT_CLEARANCE - offMin);
+        } else {
+            adjusted = Math.min(subCoord, plane - PORTAL_EXIT_CLEARANCE - offMax);
+        }
+        if (adjusted == subCoord) return dstWorld;
+
+        AeroPortals.LOGGER.debug("[AeroPortals] pushed sub {} clear of destination portal plane along {} ({} -> {})",
+                sub.getUniqueId(), normalIsZ ? "Z" : "X", subCoord, adjusted);
+        return normalIsZ
+                ? new Vec3(dstWorld.x, dstWorld.y, adjusted)
+                : new Vec3(adjusted, dstWorld.y, dstWorld.z);
+    }
+
     private static Vec3 landingAboveBlock(ServerSubLevel sub, BlockPos warpPos) {
         int targetMinY = warpPos.getY() + 1;
         AABB aabb = AabbUtil.worldAabb(sub);
@@ -472,7 +500,16 @@ public final class PortalTeleport {
         }
 
         if (validateLanding) {
+            boolean clearBlocks = AeroPortalsConfig.CLEAR_DESTINATION_BLOCKS.get();
             for (PendingMove pm : pending) {
+                if (clearBlocks) {
+                    int cleared = clearLandingSpace(dstLevel, pm.sub, pm.srcPos, pm.dstPos);
+                    if (cleared > 0) {
+                        AeroPortals.LOGGER.debug("[AeroPortals] {} teleport: cleared {} destination block(s) for sub {}",
+                                contextLabel, cleared, pm.sub.getUniqueId());
+                    }
+                    continue;
+                }
                 Optional<BlockPos> blocker = validateLandingSpace(dstLevel, pm.sub, pm.srcPos, pm.dstPos);
                 if (blocker.isPresent()) {
                     BlockPos blockerPos = blocker.get();
@@ -743,6 +780,47 @@ public final class PortalTeleport {
             }
         }
         return Optional.empty();
+    }
+
+    private static int clearLandingSpace(ServerLevel dstLevel, ServerSubLevel sub, Vec3 srcWorld, Vec3 dstWorld) {
+        AABB srcAabb = AabbUtil.worldAabb(sub);
+        Vec3 translation = dstWorld.subtract(srcWorld);
+        AABB dstAabb = srcAabb.move(translation);
+
+        int x0 = (int) Math.floor(dstAabb.minX);
+        int y0 = (int) Math.floor(dstAabb.minY);
+        int z0 = (int) Math.floor(dstAabb.minZ);
+        int x1 = (int) Math.floor(dstAabb.maxX - 1.0e-6);
+        int y1 = (int) Math.floor(dstAabb.maxY - 1.0e-6);
+        int z1 = (int) Math.floor(dstAabb.maxZ - 1.0e-6);
+
+        int cleared = 0;
+        int unbreakable = 0;
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int y = y0; y <= y1; y++) {
+            for (int x = x0; x <= x1; x++) {
+                for (int z = z0; z <= z1; z++) {
+                    cursor.set(x, y, z);
+                    BlockState s = dstLevel.getBlockState(cursor);
+                    if (s.isAir()) continue;
+                    if (s.canBeReplaced()) continue;
+                    if (!s.getFluidState().isEmpty()) continue;
+                    if (s.is(Blocks.END_GATEWAY)) continue;
+                    if (isPortalRelated(dstLevel, cursor)) continue;
+                    if (s.getDestroySpeed(dstLevel, cursor) < 0) {
+                        unbreakable++;
+                        continue;
+                    }
+                    dstLevel.setBlock(cursor, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+                    cleared++;
+                }
+            }
+        }
+        if (unbreakable > 0) {
+            AeroPortals.LOGGER.warn("[AeroPortals] {} unbreakable block(s) inside the landing area for sub {} could not be cleared",
+                    unbreakable, sub.getUniqueId());
+        }
+        return cleared;
     }
 
     private static boolean isPortalRelated(ServerLevel level, BlockPos pos) {

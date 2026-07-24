@@ -14,7 +14,7 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 - **End portals** Sail onto an end portal and the ship lands at the vanilla End spawn point. The 5x5 obsidian spawn pad is rebuilt if missing. Travelling back from the End drops you near world spawn.
 
-- **Non-destructive landings** If your destination is blocked by terrain or builds, AeroPortals will tell you in chat which block is in the way and cancel the teleport. Your ship stays where it is, and the destination side is never modified. Clear the space and try again.
+- **Non-destructive landings** If your destination is blocked by terrain or builds, AeroPortals will tell you in chat which block is in the way and cancel the teleport. Your ship stays where it is, and the destination side is never modified. Clear the space and try again. Server admins who would rather have big ships carve their own landing zone can enable `clear_destination_blocks` in the server config: blocking blocks at the destination are then destroyed (without drops) instead of cancelling the trip. Portal blocks, portal frames, and unbreakable blocks are always left intact.
 
 - **Aether portals** (when [The Aether](https://www.curseforge.com/minecraft/mc-mods/aether) is installed). Same idea as nether portals but with glowstone frames and the Aether dimension.
 
