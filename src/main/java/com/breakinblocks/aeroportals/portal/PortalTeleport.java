@@ -504,6 +504,7 @@ public final class PortalTeleport {
             replayEntityRiders(srcLevel, dstLevel, newSub, plan.entityRiders);
             forceClientSync(dstLevel, newSub, AeroPortalsConfig.CLEAR_VELOCITY_ON_ARRIVAL.get());
             DeferredClientSyncs.scheduleRetries(server.getTickCount(), dstLevel, newSub);
+            DeferredRiderSettles.schedule(server.getTickCount(), dstLevel, newSub, plan.riders, plan.entityRiders);
             PortalCooldown.mark(newSub.getUniqueId(), server.getTickCount());
             PortalCooldown.suppressUntilLeftPortal(newSub.getUniqueId(), newSubPos);
             NeoForge.EVENT_BUS.post(new SubLevelTransferEvent(
@@ -563,6 +564,76 @@ public final class PortalTeleport {
                     it.remove();
                 }
             }
+        }
+    }
+
+    public static final class DeferredRiderSettles {
+        private static final long[] DELAYS_TICKS = {5L, 15L, 35L};
+        private static final double FALL_THRESHOLD = 1.0;
+        private static final double MAX_HORIZONTAL_DIST_SQR = 32.0 * 32.0;
+        private static final List<PendingSettle> pending = Collections.synchronizedList(new ArrayList<>());
+
+        private record PendingSettle(long targetTick, ServerLevel level, ServerSubLevel sub,
+                                     List<RiderBinding> riders, List<EntityRiderBinding> entityRiders) {}
+
+        public static void schedule(long currentTick, ServerLevel level, ServerSubLevel sub,
+                                    List<RiderBinding> riders, List<EntityRiderBinding> entityRiders) {
+            if (riders.isEmpty() && entityRiders.isEmpty()) return;
+            for (long delay : DELAYS_TICKS) {
+                pending.add(new PendingSettle(currentTick + delay, level, sub, riders, entityRiders));
+            }
+        }
+
+        public static void tick(long currentTick) {
+            synchronized (pending) {
+                Iterator<PendingSettle> it = pending.iterator();
+                while (it.hasNext()) {
+                    PendingSettle p = it.next();
+                    if (p.targetTick > currentTick) continue;
+                    if (!p.sub.isRemoved()) {
+                        settle(p);
+                    }
+                    it.remove();
+                }
+            }
+        }
+
+        private static void settle(PendingSettle p) {
+            Vec3 subPos = subWorldPos(p.sub.logicalPose());
+            MinecraftServer server = p.level.getServer();
+
+            for (RiderBinding rb : p.riders) {
+                ServerPlayer player = server.getPlayerList().getPlayer(rb.playerUuid());
+                if (player == null || player.serverLevel() != p.level) continue;
+                if (player.isSpectator() || player.isFallFlying() || player.getAbilities().flying) continue;
+                Vec3 expected = subPos.add(rb.localOffset());
+                if (!fellBelow(player.position(), expected)) continue;
+                player.teleportTo(p.level, expected.x, expected.y, expected.z,
+                        Collections.<RelativeMovement>emptySet(), player.getYRot(), player.getXRot());
+                player.setDeltaMovement(Vec3.ZERO);
+                player.fallDistance = 0.0f;
+                AeroPortals.LOGGER.debug("[AeroPortals] settle correction: rider {} fell below sub {}; moved back to {}",
+                        player.getGameProfile().getName(), p.sub.getUniqueId(), expected);
+            }
+
+            for (EntityRiderBinding b : p.entityRiders) {
+                Entity e = p.level.getEntity(b.entityUuid());
+                if (e == null || !e.isAlive()) continue;
+                Vec3 expected = subPos.add(b.localOffset());
+                if (!fellBelow(e.position(), expected)) continue;
+                e.teleportTo(expected.x, expected.y, expected.z);
+                e.setDeltaMovement(Vec3.ZERO);
+                e.fallDistance = 0.0f;
+                AeroPortals.LOGGER.debug("[AeroPortals] settle correction: entity {} ({}) fell below sub {}; moved back to {}",
+                        e.getType(), b.entityUuid(), p.sub.getUniqueId(), expected);
+            }
+        }
+
+        private static boolean fellBelow(Vec3 actual, Vec3 expected) {
+            double dx = actual.x - expected.x;
+            double dz = actual.z - expected.z;
+            if (dx * dx + dz * dz > MAX_HORIZONTAL_DIST_SQR) return false;
+            return actual.y < expected.y - FALL_THRESHOLD;
         }
     }
 

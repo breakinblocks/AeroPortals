@@ -1,6 +1,7 @@
 package com.breakinblocks.aeroportals.events;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.compat.Ae2SpatialCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import com.breakinblocks.aeroportals.portal.PortalDetector;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
@@ -30,6 +31,8 @@ public final class ServerTickHandler {
 
         MinecraftServer server = event.getServer();
         PortalTeleport.DeferredClientSyncs.tick(server.getTickCount());
+        PortalTeleport.DeferredRiderSettles.tick(server.getTickCount());
+        Ae2SpatialCompat.tick(server);
 
         long t = ++tick;
         int interval = AeroPortalsConfig.SCAN_INTERVAL_TICKS.get();

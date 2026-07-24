@@ -1,0 +1,6 @@
+{
+  "dimension": "ae2:spatial_storage",
+  "priority": 100,
+  "base_gravity": [0.0, 0.0, 0.0],
+  "universal_drag": 0.5
+}
