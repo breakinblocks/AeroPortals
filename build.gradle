@@ -144,6 +144,8 @@ dependencies {
 	localRuntime("io.codechicken:CodeChickenLib:1.21.1-4.6.1.526") { transitive = false }
 
 	localRuntime("maven.modrinth:ae2:19.2.17") { transitive = false }
+
+	localRuntime("maven.modrinth:stackable-planar-dimensions:PyG6tVYk") { transitive = false }
 }
 
 tasks.withType(ProcessResources).configureEach {
