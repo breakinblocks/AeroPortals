@@ -155,6 +155,8 @@ dependencies {
 	localRuntime("curse.maven:cupboard-326652:8217735") { transitive = false }
 
 	localRuntime("maven.modrinth:create-teleporters:gMBCo1Df") { transitive = false }
+
+	localRuntime("maven.modrinth:create-ender-gateway:VfxSTFHt") { transitive = false }
 }
 
 tasks.withType(ProcessResources).configureEach {

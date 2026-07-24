@@ -2,6 +2,7 @@ package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
+import com.breakinblocks.aeroportals.compat.CreateEnderGatewayCompat;
 import com.breakinblocks.aeroportals.compat.CreateTeleportersCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
@@ -15,7 +16,8 @@ public enum PortalKind {
     AETHER,
     DRACONIC,
     DEEPER_DARKER,
-    CREATE_TELEPORTERS;
+    CREATE_TELEPORTERS,
+    ENDER_GATEWAY;
 
     public static PortalKind ofBlock(BlockState state) {
         if (state.is(Blocks.NETHER_PORTAL)) return NETHER;
@@ -25,6 +27,7 @@ public enum PortalKind {
         if (DraconicEvolutionCompat.isPortalBlock(state)) return DRACONIC;
         if (DeeperAndDarkerCompat.isPortalBlock(state)) return DEEPER_DARKER;
         if (CreateTeleportersCompat.isPortalBlock(state)) return CREATE_TELEPORTERS;
+        if (CreateEnderGatewayCompat.isPortalBlock(state)) return ENDER_GATEWAY;
         return null;
     }
 }

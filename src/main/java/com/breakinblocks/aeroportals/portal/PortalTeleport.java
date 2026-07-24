@@ -4,6 +4,7 @@ import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.api.SubLevelTransferEvent;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
+import com.breakinblocks.aeroportals.compat.CreateEnderGatewayCompat;
 import com.breakinblocks.aeroportals.compat.CreateTeleportersCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
@@ -404,6 +405,59 @@ public final class PortalTeleport {
                 srcLevel.dimension().location(), srcPortalBlock, dest.dim().location(), dest.pos(), dstWorld);
 
         executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "draconic");
+    }
+
+    public static void teleportEnderGateway(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect, BlockPos hitPos) {
+        MinecraftServer server = srcLevel.getServer();
+        ResourceKey<Level> dstKey = (srcLevel.dimension() == Level.END) ? Level.OVERWORLD : Level.END;
+        ServerLevel dstLevel = server.getLevel(dstKey);
+        if (dstLevel == null) {
+            AeroPortals.LOGGER.warn("[AeroPortals] ender gateway: destination dimension {} not loaded; aborting", dstKey.location());
+            return;
+        }
+
+        Optional<BlockPos> linked = CreateEnderGatewayCompat.readLinkedPos(srcLevel, hitPos);
+        if (linked.isEmpty()) {
+            BlockPos min = srcRect.minCorner();
+            outer:
+            for (int w = 0; w < srcRect.width() && linked.isEmpty(); w++) {
+                for (int h = 0; h < srcRect.height(); h++) {
+                    BlockPos candidate = srcRect.axis() == Direction.Axis.X
+                            ? min.offset(w, h, 0)
+                            : min.offset(0, h, w);
+                    linked = CreateEnderGatewayCompat.readLinkedPos(srcLevel, candidate);
+                    if (linked.isPresent()) break outer;
+                }
+            }
+        }
+        if (linked.isEmpty()) {
+            AeroPortals.LOGGER.debug("[AeroPortals] ender gateway at {} is not linked; skipping", hitPos);
+            return;
+        }
+
+        BlockPos linkedPos = linked.get();
+        ensureChunksLoaded(dstLevel, linkedPos);
+        if (!CreateEnderGatewayCompat.isPortalBlock(dstLevel.getBlockState(linkedPos))) {
+            AeroPortals.LOGGER.warn("[AeroPortals] ender gateway at {} links to {} in {} but no gateway exists there; skipping",
+                    hitPos, linkedPos, dstKey.location());
+            return;
+        }
+        PortalRect dstRect = PortalGeom.measureFromBlock(dstLevel, linkedPos, CreateEnderGatewayCompat.portalBlock());
+        if (dstRect == null) {
+            AeroPortals.LOGGER.warn("[AeroPortals] destination ender gateway at {} failed rect measurement; skipping", linkedPos);
+            return;
+        }
+
+        Vec3 srcWorld = subWorldPos(sub.logicalPose());
+        Vec3 subOffsetFromPortal = srcWorld.subtract(srcRect.centerWorld());
+        Vec3 dstWorld = pushClearOfPortalPlane(sub, srcWorld, dstRect,
+                clampToWorldBorder(dstLevel, dstRect.centerWorld().add(subOffsetFromPortal)));
+
+        AeroPortals.LOGGER.debug("[AeroPortals] ender gateway teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={}",
+                srcLevel.dimension().location(), srcWorld, srcRect.centerWorld(),
+                dstKey.location(), dstRect.centerWorld(), dstWorld);
+
+        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "ender-gateway");
     }
 
     public static void teleportCreateTeleporters(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {

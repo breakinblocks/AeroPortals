@@ -2,6 +2,7 @@ package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
+import com.breakinblocks.aeroportals.compat.CreateEnderGatewayCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import com.breakinblocks.aeroportals.util.AabbUtil;
@@ -89,6 +90,19 @@ public final class PortalDetector {
                     AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps draconic portal at {} in dim {}",
                             sub.getUniqueId(), hit.pos(), level.dimension().location());
                     PortalTeleport.teleportDraconic(level, sub, hit.pos());
+                }
+                case ENDER_GATEWAY -> {
+                    PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
+                            CreateEnderGatewayCompat.portalBlock());
+                    if (srcRect == null) {
+                        AeroPortals.LOGGER.warn("[AeroPortals] ender gateway block at {} but rect measurement failed; skipping",
+                                hit.pos());
+                        continue;
+                    }
+                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps ender gateway at {} (axis={} {}x{}) in dim {}",
+                            sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
+                            level.dimension().location());
+                    PortalTeleport.teleportEnderGateway(level, sub, srcRect, hit.pos());
                 }
                 case CREATE_TELEPORTERS -> {
                     AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps create-teleporters portal at {} in dim {}",
