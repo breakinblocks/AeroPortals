@@ -30,6 +30,7 @@ import net.minecraft.world.phys.Vec3;
 
 import java.util.BitSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 public final class SableBridge {
@@ -58,11 +59,13 @@ public final class SableBridge {
         List<BlockPos> assembledBearings = CreateContraptionCompat.disassembleAssemblies(srcLevel, src);
         List<AABB> superGlue = CreateContraptionCompat.captureGlue(srcLevel, src);
         List<AABB> honeyGlue = SimulatedCompat.captureHoneyGlue(srcLevel, src);
+        CreateContraptionCompat.KineticSnapshot kinetics = CreateContraptionCompat.collectKinetics(srcLevel, src);
 
         SubLevelData data = SubLevelSerializer.toData(src, List.of());
         AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: snapshotted sub uuid={} bounds={}", data.uuid(), data.bounds());
 
         CompoundTag tag = data.fullTag();
+        stripKineticState(tag.getCompound("plot"), kinetics.kineticPositions());
         CompoundTag sourceSnapshot = tag.copy();
 
         CompoundTag poseTag = tag.getCompound("pose");
@@ -92,11 +95,12 @@ public final class SableBridge {
             CreateContraptionCompat.replayGlue(dstLevel, superGlue, loaded.shift());
             SimulatedCompat.replayHoneyGlue(dstLevel, honeyGlue, loaded.shift());
             CreateContraptionCompat.reassemble(dstLevel, assembledBearings, loaded.shift());
+            CreateContraptionCompat.reactivateGenerators(dstLevel, kinetics.generatorPositions(), loaded.shift());
             TeleportJournal.delete(srcLevel.getServer(), data.uuid());
             return new Moved(loaded.sub(), loaded.shift(), oldRegionMin, regionBlocks);
         }
 
-        if (restoreToSource(srcLevel, srcContainer, sourceSnapshot, data.uuid(), assembledBearings, superGlue, honeyGlue)) {
+        if (restoreToSource(srcLevel, srcContainer, sourceSnapshot, data.uuid(), assembledBearings, superGlue, honeyGlue, kinetics)) {
             TeleportJournal.delete(srcLevel.getServer(), data.uuid());
         } else {
             AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination load AND source restore failed for sub {}; left in journal for recovery on next start", data.uuid());
@@ -105,7 +109,8 @@ public final class SableBridge {
     }
 
     private static boolean restoreToSource(ServerLevel srcLevel, ServerSubLevelContainer srcContainer, CompoundTag sourceSnapshot, UUID uuid,
-                                           List<BlockPos> assembledBearings, List<AABB> superGlue, List<AABB> honeyGlue) {
+                                           List<BlockPos> assembledBearings, List<AABB> superGlue, List<AABB> honeyGlue,
+                                           CreateContraptionCompat.KineticSnapshot kinetics) {
         SubLevelData restoreData = SubLevelSerializer.fromData(sourceSnapshot);
         if (restoreData == null) return false;
         Loaded restored;
@@ -119,6 +124,7 @@ public final class SableBridge {
         CreateContraptionCompat.replayGlue(srcLevel, superGlue, restored.shift());
         SimulatedCompat.replayHoneyGlue(srcLevel, honeyGlue, restored.shift());
         CreateContraptionCompat.reassemble(srcLevel, assembledBearings, restored.shift());
+        CreateContraptionCompat.reactivateGenerators(srcLevel, kinetics.generatorPositions(), restored.shift());
         AeroPortals.LOGGER.warn("[AeroPortals] SableBridge: destination load failed; restored sub {} to source {} (teleport cancelled)",
                 uuid, srcLevel.dimension().location());
         return true;
@@ -230,6 +236,37 @@ public final class SableBridge {
         return true;
     }
 
+    private static final String[] KINETIC_KEYS = {"Speed", "Source", "Network", "NeedsSpeedUpdate"};
+
+    private static void stripKineticState(CompoundTag plotTag, Set<Long> kineticPositions) {
+        if (kineticPositions.isEmpty()) return;
+        int stripped = 0;
+        CompoundTag chunks = plotTag.getCompound("chunks");
+        for (String key : chunks.getAllKeys()) {
+            ListTag blockEntities = chunks.getCompound(key).getList("block_entities", Tag.TAG_COMPOUND);
+            for (int i = 0; i < blockEntities.size(); i++) {
+                CompoundTag be = blockEntities.getCompound(i);
+                long pos = BlockPos.asLong(be.getInt("x"), be.getInt("y"), be.getInt("z"));
+                if (!kineticPositions.contains(pos)) continue;
+                for (String kineticKey : KINETIC_KEYS) {
+                    be.remove(kineticKey);
+                }
+                for (String childKey : be.getAllKeys()) {
+                    if (be.get(childKey) instanceof CompoundTag child
+                            && child.contains("Speed")
+                            && (child.contains("Source") || child.contains("Network"))) {
+                        for (String kineticKey : KINETIC_KEYS) {
+                            child.remove(kineticKey);
+                        }
+                    }
+                }
+                stripped++;
+            }
+        }
+        AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: stripped kinetic state from {} of {} block entit(ies) so rotation networks rebuild cold",
+                stripped, kineticPositions.size());
+    }
+
     private static void offsetPlotCoordinates(CompoundTag plotTag, int deltaX, int deltaY, int deltaZ) {
         CompoundTag chunks = plotTag.getCompound("chunks");
         for (String key : chunks.getAllKeys()) {
@@ -246,6 +283,13 @@ public final class SableBridge {
             if (entry.contains("x", Tag.TAG_INT)) entry.putInt("x", entry.getInt("x") + deltaX);
             if (entry.contains("y", Tag.TAG_INT)) entry.putInt("y", entry.getInt("y") + deltaY);
             if (entry.contains("z", Tag.TAG_INT)) entry.putInt("z", entry.getInt("z") + deltaZ);
+            if (entry.contains("Controller", Tag.TAG_INT_ARRAY)) {
+                int[] controller = entry.getIntArray("Controller");
+                if (controller.length == 3) {
+                    entry.putIntArray("Controller", new int[]{
+                            controller[0] + deltaX, controller[1] + deltaY, controller[2] + deltaZ});
+                }
+            }
         }
     }
 

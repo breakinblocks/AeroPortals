@@ -6,6 +6,8 @@ import com.simibubi.create.content.contraptions.bearing.ClockworkBearingBlockEnt
 import com.simibubi.create.content.contraptions.bearing.MechanicalBearingBlockEntity;
 import com.simibubi.create.content.contraptions.glue.SuperGlueEntity;
 import com.simibubi.create.content.contraptions.piston.LinearActuatorBlockEntity;
+import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
+import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.plot.PlotChunkHolder;
 import net.minecraft.core.BlockPos;
@@ -16,7 +18,9 @@ import net.minecraft.world.phys.AABB;
 import net.neoforged.fml.ModList;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class CreateContraptionCompat {
     private static final boolean CREATE_LOADED = ModList.get().isLoaded("create");
@@ -41,6 +45,20 @@ public final class CreateContraptionCompat {
     public static void reassemble(ServerLevel level, List<BlockPos> bearingPositions, BlockPos shift) {
         if (!CREATE_LOADED || bearingPositions.isEmpty()) return;
         Impl.reassemble(level, bearingPositions, shift);
+    }
+
+    public record KineticSnapshot(Set<Long> kineticPositions, Set<Long> generatorPositions) {
+        public static final KineticSnapshot EMPTY = new KineticSnapshot(Set.of(), Set.of());
+    }
+
+    public static KineticSnapshot collectKinetics(ServerLevel level, ServerSubLevel sub) {
+        if (!CREATE_LOADED) return KineticSnapshot.EMPTY;
+        return Impl.collectKinetics(level, sub);
+    }
+
+    public static void reactivateGenerators(ServerLevel level, Set<Long> generatorPositions, BlockPos shift) {
+        if (!CREATE_LOADED || generatorPositions.isEmpty()) return;
+        Impl.reactivateGenerators(level, generatorPositions, shift);
     }
 
     private static final class Impl {
@@ -101,6 +119,41 @@ public final class CreateContraptionCompat {
                 level.addFreshEntity(new SuperGlueEntity(level, moved));
             }
             AeroPortals.LOGGER.debug("[AeroPortals] replayed {} super glue box(es) post-teleport (shift {})", glueBoxes.size(), shift);
+        }
+
+        static KineticSnapshot collectKinetics(ServerLevel level, ServerSubLevel sub) {
+            Set<Long> kinetics = new HashSet<>();
+            Set<Long> generators = new HashSet<>();
+            for (PlotChunkHolder holder : sub.getPlot().getLoadedChunks()) {
+                LevelChunk chunk = level.getChunk(holder.getPos().x, holder.getPos().z);
+                for (BlockEntity be : chunk.getBlockEntities().values()) {
+                    if (!(be instanceof KineticBlockEntity)) continue;
+                    long pos = be.getBlockPos().asLong();
+                    kinetics.add(pos);
+                    if (be instanceof GeneratingKineticBlockEntity) {
+                        generators.add(pos);
+                    }
+                }
+            }
+            if (!kinetics.isEmpty()) {
+                AeroPortals.LOGGER.debug("[AeroPortals] collected {} kinetic block(s) ({} generator(s)) from sub {} pre-teleport",
+                        kinetics.size(), generators.size(), sub.getUniqueId());
+            }
+            return new KineticSnapshot(kinetics, generators);
+        }
+
+        static void reactivateGenerators(ServerLevel level, Set<Long> generatorPositions, BlockPos shift) {
+            int reactivated = 0;
+            for (long packed : generatorPositions) {
+                BlockPos target = BlockPos.of(packed).offset(shift);
+                if (level.getBlockEntity(target) instanceof GeneratingKineticBlockEntity generator) {
+                    generator.reActivateSource = true;
+                    reactivated++;
+                } else {
+                    AeroPortals.LOGGER.warn("[AeroPortals] expected a kinetic generator at {} post-teleport but found none; it may need a manual restart", target);
+                }
+            }
+            AeroPortals.LOGGER.debug("[AeroPortals] flagged {} kinetic generator(s) to re-propagate rotation post-teleport", reactivated);
         }
 
         static void reassemble(ServerLevel level, List<BlockPos> bearingPositions, BlockPos shift) {
