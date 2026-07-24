@@ -28,7 +28,7 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 - **TelePastries cakes** (when [TelePastries](https://www.curseforge.com/minecraft/mc-mods/telepastries) is installed). Right-click any TelePastries cake (Overworld, Nether, End, Twilight, Lost City, or the three configurable custom cakes) while on your airship and the ship travels to that cake's dimension with you.
 
-- **Dimension stacking** (when [Stackable Planar Dimensions](https://www.curseforge.com/minecraft/mc-mods/stackable-planar-dimensions) is installed). Fly your airship down through the floor or up past the ceiling of a stacked dimension and the whole ship crosses into the adjoining dimension with everyone aboard, using the stack order and heights from that mod's config.
+- **Dimension stacking** (when [Stackable Planar Dimensions](https://www.curseforge.com/minecraft/mc-mods/stackable-planar-dimensions) or [Forgiving World](https://www.curseforge.com/minecraft/mc-mods/forgiving-world) is installed). Fly your airship down through the floor or up past the ceiling of a stacked dimension and the whole ship crosses into the adjoining dimension with everyone aboard, using the stack layout, heights, and coordinate scaling from that mod's config.
 
 - **AE2 spatial storage** (when [Applied Energistics 2](https://www.curseforge.com/minecraft/mc-mods/applied-energistics-2) is installed). Park your airship inside a Spatial IO Port capture area and it travels into the spatial storage cell with the rest of the region, then comes back out wherever the cell is deployed. The whole ship must fit inside the pylon area or it is left behind; docked or roped-together ships travel as a group and must all fit. While stored, the ship is held in stasis (no gravity inside the storage dimension) and resumes normal flight when deployed.
 
@@ -96,6 +96,7 @@ Add three coordinates after the dimension to pick the landing spot yourself, for
 | [Deeper and Darker](https://www.curseforge.com/minecraft/mc-mods/deeperdarker) | 1.3+ | optional |
 | [Applied Energistics 2](https://www.curseforge.com/minecraft/mc-mods/applied-energistics-2) | 19.2+ | optional |
 | [Stackable Planar Dimensions](https://www.curseforge.com/minecraft/mc-mods/stackable-planar-dimensions) | 1.9+ | optional |
+| [Forgiving World](https://www.curseforge.com/minecraft/mc-mods/forgiving-world) | 4.7+ | optional |
 
 If an optional mod isn't installed, that integration is simply inactive: no errors, no warnings, no overhead.
 

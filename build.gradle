@@ -117,6 +117,10 @@ repositories {
 		url = "https://api.modrinth.com/maven"
 		content { includeGroup("maven.modrinth") }
 	}
+	maven {
+		url = "https://cursemaven.com"
+		content { includeGroup("curse.maven") }
+	}
 }
 
 dependencies {
@@ -146,6 +150,9 @@ dependencies {
 	localRuntime("maven.modrinth:ae2:19.2.17") { transitive = false }
 
 	localRuntime("maven.modrinth:stackable-planar-dimensions:PyG6tVYk") { transitive = false }
+
+	localRuntime("curse.maven:forgiving-world-523233:5581756") { transitive = false }
+	localRuntime("curse.maven:cupboard-326652:8217735") { transitive = false }
 }
 
 tasks.withType(ProcessResources).configureEach {
