@@ -4,6 +4,7 @@ import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.api.SubLevelTransferEvent;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
+import com.breakinblocks.aeroportals.compat.CreateTeleportersCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
@@ -363,6 +364,39 @@ public final class PortalTeleport {
                 srcLevel.dimension().location(), srcPortalBlock, dest.dim().location(), dest.pos(), dstWorld);
 
         executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "draconic");
+    }
+
+    public static void teleportCreateTeleporters(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
+        MinecraftServer server = srcLevel.getServer();
+        Optional<CreateTeleportersCompat.Destination> destOpt = CreateTeleportersCompat.readDestination(srcLevel, srcPortalBlock);
+        if (destOpt.isEmpty()) {
+            AeroPortals.LOGGER.debug("[AeroPortals] create-teleporters portal at {} has no readable destination; skipping", srcPortalBlock);
+            return;
+        }
+        CreateTeleportersCompat.Destination dest = destOpt.get();
+        ServerLevel dstLevel = server.getLevel(dest.dim());
+        if (dstLevel == null) {
+            AeroPortals.LOGGER.warn("[AeroPortals] create-teleporters dest dim {} not loaded; aborting", dest.dim().location());
+            return;
+        }
+
+        ensureChunksLoaded(dstLevel, dest.pos());
+        Vec3 dstWorld = clampToWorldBorder(dstLevel, landingAboveBlock(sub, dest.pos()));
+
+        AABB aabb = AabbUtil.worldAabb(sub).inflate(1.0);
+        for (ServerPlayer p : srcLevel.players()) {
+            if (Sable.HELPER.getTrackingSubLevel(p) == sub) {
+                p.getPersistentData().putInt("PortalTeleportCooldown", VANILLA_PORTAL_COOLDOWN_OVERRIDE);
+            }
+        }
+        for (Entity e : srcLevel.getEntities((Entity) null, aabb)) {
+            e.getPersistentData().putInt("PortalTeleportCooldown", VANILLA_PORTAL_COOLDOWN_OVERRIDE);
+        }
+
+        AeroPortals.LOGGER.debug("[AeroPortals] create-teleporters teleport: src dim={} portalBlock={} -> dst dim={} targetPos={} landing={}",
+                srcLevel.dimension().location(), srcPortalBlock, dest.dim().location(), dest.pos(), dstWorld);
+
+        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "create_teleporters");
     }
 
     private static Vec3 landingAboveBlock(ServerSubLevel sub, BlockPos warpPos) {

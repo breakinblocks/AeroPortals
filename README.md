@@ -28,6 +28,8 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 - **TelePastries cakes** (when [TelePastries](https://www.curseforge.com/minecraft/mc-mods/telepastries) is installed). Right-click any TelePastries cake (Overworld, Nether, End, Twilight, Lost City, or the three configurable custom cakes) while on your airship and the ship travels to that cake's dimension with you.
 
+- **Create: Teleporters portals** (when [Create: Teleporters](https://www.curseforge.com/minecraft/mc-mods/create-teleporters) is installed). Fly your ship into a custom portal frame and it travels to the portal's configured destination, whether that is a set of TP Link coordinates or another linked portal, in any dimension.
+
 - **Dimension stacking** (when [Stackable Planar Dimensions](https://www.curseforge.com/minecraft/mc-mods/stackable-planar-dimensions) or [Forgiving World](https://www.curseforge.com/minecraft/mc-mods/forgiving-world) is installed). Fly your airship down through the floor or up past the ceiling of a stacked dimension and the whole ship crosses into the adjoining dimension with everyone aboard, using the stack layout, heights, and coordinate scaling from that mod's config.
 
 - **AE2 spatial storage** (when [Applied Energistics 2](https://www.curseforge.com/minecraft/mc-mods/applied-energistics-2) is installed). Park your airship inside a Spatial IO Port capture area and it travels into the spatial storage cell with the rest of the region, then comes back out wherever the cell is deployed. The whole ship must fit inside the pylon area or it is left behind; docked or roped-together ships travel as a group and must all fit. While stored, the ship is held in stasis (no gravity inside the storage dimension) and resumes normal flight when deployed.
@@ -97,6 +99,7 @@ Add three coordinates after the dimension to pick the landing spot yourself, for
 | [Applied Energistics 2](https://www.curseforge.com/minecraft/mc-mods/applied-energistics-2) | 19.2+ | optional |
 | [Stackable Planar Dimensions](https://www.curseforge.com/minecraft/mc-mods/stackable-planar-dimensions) | 1.9+ | optional |
 | [Forgiving World](https://www.curseforge.com/minecraft/mc-mods/forgiving-world) | 4.7+ | optional |
+| [Create: Teleporters](https://www.curseforge.com/minecraft/mc-mods/create-teleporters) | 2.0.2+ | optional |
 
 If an optional mod isn't installed, that integration is simply inactive: no errors, no warnings, no overhead.
 
@@ -121,7 +124,7 @@ AeroPortals writes the ship snapshot to disk before moving it. If the server cra
 ## Known limitations
 
 - **Ropes and joints don't survive teleport.** Ships connected by Sable rope/docking links travel together and stay in formation, but the physical connection itself breaks. Re-tie the rope or re-dock at the destination.
-- **Other modded portal types aren't auto-supported.** Twilight Forest, Mystcraft, etc. aren't recognized. Vanilla nether/end, plus Aether, Ars Nouveau, Tropicraft, Draconic Evolution, Deeper and Darker, and AE2 spatial storage are the supported travel methods today.
+- **Other modded portal types aren't auto-supported.** Twilight Forest, Mystcraft, etc. aren't recognized. Vanilla nether/end, plus Aether, Ars Nouveau, Tropicraft, Draconic Evolution, Deeper and Darker, Create: Teleporters, AE2 spatial storage, and dimension stacking (Stackable Planar Dimensions / Forgiving World) are the supported travel methods today.
 - **Speed slightly drops per teleport.** Each portal trip costs about 10% of your velocity (Sable's reload setting). Tune `sub_level_velocity_retained_on_load` in Sable's config if you want full preservation.
 
 ## Want support for another portal or dimension?

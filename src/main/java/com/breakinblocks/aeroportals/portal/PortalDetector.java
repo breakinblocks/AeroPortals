@@ -90,6 +90,11 @@ public final class PortalDetector {
                             sub.getUniqueId(), hit.pos(), level.dimension().location());
                     PortalTeleport.teleportDraconic(level, sub, hit.pos());
                 }
+                case CREATE_TELEPORTERS -> {
+                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps create-teleporters portal at {} in dim {}",
+                            sub.getUniqueId(), hit.pos(), level.dimension().location());
+                    PortalTeleport.teleportCreateTeleporters(level, sub, hit.pos());
+                }
                 case DEEPER_DARKER -> {
                     PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
                             DeeperAndDarkerCompat.portalBlock());

@@ -153,6 +153,8 @@ dependencies {
 
 	localRuntime("curse.maven:forgiving-world-523233:5581756") { transitive = false }
 	localRuntime("curse.maven:cupboard-326652:8217735") { transitive = false }
+
+	localRuntime("maven.modrinth:create-teleporters:gMBCo1Df") { transitive = false }
 }
 
 tasks.withType(ProcessResources).configureEach {

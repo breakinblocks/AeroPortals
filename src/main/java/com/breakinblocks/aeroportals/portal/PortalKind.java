@@ -2,6 +2,7 @@ package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
+import com.breakinblocks.aeroportals.compat.CreateTeleportersCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
 import net.minecraft.world.level.block.Blocks;
@@ -13,7 +14,8 @@ public enum PortalKind {
     ARS_NOUVEAU,
     AETHER,
     DRACONIC,
-    DEEPER_DARKER;
+    DEEPER_DARKER,
+    CREATE_TELEPORTERS;
 
     public static PortalKind ofBlock(BlockState state) {
         if (state.is(Blocks.NETHER_PORTAL)) return NETHER;
@@ -22,6 +24,7 @@ public enum PortalKind {
         if (AetherCompat.isPortalBlock(state)) return AETHER;
         if (DraconicEvolutionCompat.isPortalBlock(state)) return DRACONIC;
         if (DeeperAndDarkerCompat.isPortalBlock(state)) return DEEPER_DARKER;
+        if (CreateTeleportersCompat.isPortalBlock(state)) return CREATE_TELEPORTERS;
         return null;
     }
 }
