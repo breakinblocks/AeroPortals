@@ -18,11 +18,11 @@ import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.SubLevelHelper;
 import dev.ryanhcode.sable.api.entity.EntitySubLevelUtil;
 import dev.ryanhcode.sable.api.physics.PhysicsPipeline;
+import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.Pose3dc;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
-import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -68,6 +68,7 @@ public final class PortalTeleport {
     private static final int DEST_CHUNK_RADIUS = 2;
     private static final int VANILLA_PORTAL_COOLDOWN_OVERRIDE = 300;
     private static final double MAX_RIDER_OFFSET_SQR = 1024.0 * 1024.0;
+    private static final double RIDER_REACQUIRE_MARGIN = 1.0;
 
     public static final ConcurrentHashMap<UUID, Entity> lastMovedEntities = new ConcurrentHashMap<>();
 
@@ -645,9 +646,12 @@ public final class PortalTeleport {
         for (Map.Entry<SubMovePlan, SableBridge.Moved> e : moved.entrySet()) {
             SubMovePlan plan = e.getKey();
             ServerSubLevel newSub = e.getValue().sub();
+            forceClientSync(dstLevel, newSub, AeroPortalsConfig.CLEAR_VELOCITY_ON_ARRIVAL.get());
+
             Pose3dc newPose = newSub.logicalPose();
             float newYawBase = (float) YawMath.yawFromOrientation(newPose.orientation());
             Vec3 newSubPos = subWorldPos(newPose);
+            Vec3 arrivalVelocity = subVelocity(newSub);
 
             for (RiderBinding rb : plan.riders) {
                 ServerPlayer p = server.getPlayerList().getPlayer(rb.playerUuid());
@@ -662,12 +666,13 @@ public final class PortalTeleport {
                 float yaw = rb.yawDelta() + newYawBase;
                 p.teleportTo(dstLevel, worldFinal.x, worldFinal.y, worldFinal.z,
                         Collections.<RelativeMovement>emptySet(), yaw, rb.pitch());
-                AeroPortals.LOGGER.debug("[AeroPortals] moved rider {} -> {} yaw={} pitch={}",
-                        p.getGameProfile().getName(), worldFinal, yaw, rb.pitch());
+                p.setDeltaMovement(arrivalVelocity);
+                p.hurtMarked = true;
+                AeroPortals.LOGGER.debug("[AeroPortals] moved rider {} -> {} yaw={} pitch={} velocity={}",
+                        p.getGameProfile().getName(), worldFinal, yaw, rb.pitch(), arrivalVelocity);
             }
 
-            replayEntityRiders(srcLevel, dstLevel, newSub, plan.entityRiders);
-            forceClientSync(dstLevel, newSub, AeroPortalsConfig.CLEAR_VELOCITY_ON_ARRIVAL.get());
+            replayEntityRiders(srcLevel, dstLevel, newSub, plan.entityRiders, arrivalVelocity);
             DeferredClientSyncs.scheduleRetries(server.getTickCount(), dstLevel, newSub);
             DeferredRiderSettles.schedule(server.getTickCount(), dstLevel, newSub, plan.riders, plan.entityRiders);
             PortalCooldown.mark(newSub.getUniqueId(), server.getTickCount());
@@ -733,9 +738,9 @@ public final class PortalTeleport {
     }
 
     public static final class DeferredRiderSettles {
-        private static final long[] DELAYS_TICKS = {5L, 15L, 35L};
-        private static final double FALL_THRESHOLD = 1.0;
-        private static final double MAX_HORIZONTAL_DIST_SQR = 32.0 * 32.0;
+        private static final long[] DELAYS_TICKS = {2L, 5L, 10L, 20L, 40L};
+        private static final double DRIFT_THRESHOLD_SQR = 1.0;
+        private static final double MAX_CORRECTION_DIST_SQR = 128.0 * 128.0;
         private static final List<PendingSettle> pending = Collections.synchronizedList(new ArrayList<>());
 
         private record PendingSettle(long targetTick, ServerLevel level, ServerSubLevel sub,
@@ -765,6 +770,8 @@ public final class PortalTeleport {
 
         private static void settle(PendingSettle p) {
             Vec3 subPos = subWorldPos(p.sub.logicalPose());
+            AABB subBox = AabbUtil.worldAabb(p.sub).inflate(RIDER_REACQUIRE_MARGIN);
+            Vec3 velocity = subVelocity(p.sub);
             MinecraftServer server = p.level.getServer();
 
             for (RiderBinding rb : p.riders) {
@@ -772,33 +779,35 @@ public final class PortalTeleport {
                 if (player == null || player.serverLevel() != p.level) continue;
                 if (player.isSpectator() || player.isFallFlying() || player.getAbilities().flying) continue;
                 Vec3 expected = subPos.add(rb.localOffset());
-                if (!fellBelow(player.position(), expected)) continue;
+                if (!driftedOff(player.position(), expected, player.getBoundingBox(), subBox)) continue;
                 player.teleportTo(p.level, expected.x, expected.y, expected.z,
                         Collections.<RelativeMovement>emptySet(), player.getYRot(), player.getXRot());
-                player.setDeltaMovement(Vec3.ZERO);
+                player.setDeltaMovement(velocity);
+                player.hurtMarked = true;
                 player.fallDistance = 0.0f;
-                AeroPortals.LOGGER.debug("[AeroPortals] settle correction: rider {} fell below sub {}; moved back to {}",
-                        player.getGameProfile().getName(), p.sub.getUniqueId(), expected);
+                AeroPortals.LOGGER.debug("[AeroPortals] settle correction: rider {} drifted off sub {} (at {}); moved back to {} with velocity {}",
+                        player.getGameProfile().getName(), p.sub.getUniqueId(), player.position(), expected, velocity);
             }
 
             for (EntityRiderBinding b : p.entityRiders) {
                 Entity e = p.level.getEntity(b.entityUuid());
                 if (e == null || !e.isAlive()) continue;
                 Vec3 expected = subPos.add(b.localOffset());
-                if (!fellBelow(e.position(), expected)) continue;
+                if (!driftedOff(e.position(), expected, e.getBoundingBox(), subBox)) continue;
                 e.teleportTo(expected.x, expected.y, expected.z);
-                e.setDeltaMovement(Vec3.ZERO);
+                e.setDeltaMovement(velocity);
+                e.hurtMarked = true;
                 e.fallDistance = 0.0f;
-                AeroPortals.LOGGER.debug("[AeroPortals] settle correction: entity {} ({}) fell below sub {}; moved back to {}",
-                        e.getType(), b.entityUuid(), p.sub.getUniqueId(), expected);
+                AeroPortals.LOGGER.debug("[AeroPortals] settle correction: entity {} ({}) drifted off sub {}; moved back to {} with velocity {}",
+                        e.getType(), b.entityUuid(), p.sub.getUniqueId(), expected, velocity);
             }
         }
 
-        private static boolean fellBelow(Vec3 actual, Vec3 expected) {
-            double dx = actual.x - expected.x;
-            double dz = actual.z - expected.z;
-            if (dx * dx + dz * dz > MAX_HORIZONTAL_DIST_SQR) return false;
-            return actual.y < expected.y - FALL_THRESHOLD;
+        private static boolean driftedOff(Vec3 actual, Vec3 expected, AABB riderBox, AABB subBox) {
+            double distSqr = actual.distanceToSqr(expected);
+            if (distSqr <= DRIFT_THRESHOLD_SQR) return false;
+            if (distSqr > MAX_CORRECTION_DIST_SQR) return false;
+            return !subBox.intersects(riderBox);
         }
     }
 
@@ -953,12 +962,10 @@ public final class PortalTeleport {
 
     private static Set<ServerPlayer> ridersOfChain(ServerLevel srcLevel, Collection<ServerSubLevel> chain) {
         Set<ServerPlayer> result = new HashSet<>();
-        Set<ServerSubLevel> chainSet = Collections.newSetFromMap(new IdentityHashMap<>());
-        chainSet.addAll(chain);
-        for (ServerPlayer p : srcLevel.players()) {
-            SubLevel tracking = Sable.HELPER.getTrackingSubLevel(p);
-            if (tracking instanceof ServerSubLevel s && chainSet.contains(s)) {
-                result.add(p);
+        for (ServerSubLevel s : chain) {
+            AABB subBox = AabbUtil.worldAabb(s).inflate(RIDER_REACQUIRE_MARGIN);
+            for (ServerPlayer p : srcLevel.players()) {
+                if (isAboard(p, s, subBox)) result.add(p);
             }
         }
         return result;
@@ -1003,7 +1010,8 @@ public final class PortalTeleport {
         return out;
     }
 
-    private static void replayEntityRiders(ServerLevel srcLevel, ServerLevel dstLevel, ServerSubLevel newSub, List<EntityRiderBinding> bindings) {
+    private static void replayEntityRiders(ServerLevel srcLevel, ServerLevel dstLevel, ServerSubLevel newSub,
+                                           List<EntityRiderBinding> bindings, Vec3 arrivalVelocity) {
         if (bindings.isEmpty()) return;
         Pose3dc newPose = newSub.logicalPose();
         float newYawBase = (float) YawMath.yawFromOrientation(newPose.orientation());
@@ -1017,12 +1025,12 @@ public final class PortalTeleport {
             Vec3 worldFinal = newSubPos.add(b.localOffset());
             float yaw = b.yawDelta() + newYawBase;
             DimensionTransition transition = new DimensionTransition(
-                    dstLevel, worldFinal, Vec3.ZERO, yaw, b.pitch(), DimensionTransition.DO_NOTHING);
+                    dstLevel, worldFinal, arrivalVelocity, yaw, b.pitch(), DimensionTransition.DO_NOTHING);
             Entity newEntity = e.changeDimension(transition);
             if (newEntity != null) {
                 lastMovedEntities.put(b.entityUuid(), newEntity);
-                AeroPortals.LOGGER.debug("[AeroPortals] moved entity {} ({}) -> {} yaw={}",
-                        newEntity.getType(), b.entityUuid(), worldFinal, yaw);
+                AeroPortals.LOGGER.debug("[AeroPortals] moved entity {} ({}) -> {} yaw={} velocity={}",
+                        newEntity.getType(), b.entityUuid(), worldFinal, yaw, arrivalVelocity);
             } else {
                 AeroPortals.LOGGER.warn("[AeroPortals] entity {} ({}) changeDimension returned null", e.getType(), b.entityUuid());
             }
@@ -1034,14 +1042,33 @@ public final class PortalTeleport {
         return new Vec3(p.x(), p.y(), p.z());
     }
 
+    static Vec3 subVelocity(ServerSubLevel sub) {
+        if (sub.isRemoved()) return Vec3.ZERO;
+        try {
+            RigidBodyHandle handle = RigidBodyHandle.of(sub);
+            if (handle == null) return Vec3.ZERO;
+            Vector3d velocity = handle.getLinearVelocity(new Vector3d());
+            return new Vec3(velocity.x, velocity.y, velocity.z).scale(1.0 / 20.0);
+        } catch (RuntimeException e) {
+            AeroPortals.LOGGER.debug("[AeroPortals] could not read velocity for sub {}; treating as stationary", sub.getUniqueId());
+            return Vec3.ZERO;
+        }
+    }
+
+    static boolean isAboard(ServerPlayer player, ServerSubLevel sub, AABB subBox) {
+        if (Sable.HELPER.getTrackingSubLevel(player) == sub) return true;
+        return Sable.HELPER.getLastTrackingSubLevel(player) == sub
+                && subBox.intersects(player.getBoundingBox());
+    }
+
     private static List<RiderBinding> captureRiders(ServerLevel srcLevel, ServerSubLevel sub) {
         List<RiderBinding> out = new ArrayList<>();
         Pose3dc pose = sub.logicalPose();
         float subYawNow = (float) YawMath.yawFromOrientation(pose.orientation());
         Vec3 subPos = subWorldPos(pose);
+        AABB subBox = AabbUtil.worldAabb(sub).inflate(RIDER_REACQUIRE_MARGIN);
         for (ServerPlayer p : srcLevel.players()) {
-            SubLevel tracking = Sable.HELPER.getTrackingSubLevel(p);
-            if (tracking != sub) continue;
+            if (!isAboard(p, sub, subBox)) continue;
             Vec3 offset = p.position().subtract(subPos);
             float yawDelta = p.getYRot() - subYawNow;
             out.add(new RiderBinding(p.getUUID(), offset, yawDelta, p.getXRot()));

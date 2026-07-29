@@ -4,6 +4,7 @@ import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.entity.EntitySubLevelUtil;
+import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.BoundingBox3d;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import com.breakinblocks.aeroportals.portal.PortalKind;
@@ -35,7 +36,7 @@ public final class VanillaPortalCanceller {
         if (!(entity.level() instanceof ServerLevel srcLevel)) return;
 
         if (entity instanceof ServerPlayer player) {
-            SubLevel tracking = Sable.HELPER.getTrackingSubLevel(player);
+            SubLevel tracking = aboardSubLevel(srcLevel, player);
             if (tracking != null && isOverlappingPortal(srcLevel, tracking)) {
                 event.setCanceled(true);
                 player.setPortalCooldown(COOLDOWN_AFTER_CANCEL);
@@ -61,6 +62,15 @@ public final class VanillaPortalCanceller {
                 return;
             }
         }
+    }
+
+    private static SubLevel aboardSubLevel(ServerLevel level, ServerPlayer player) {
+        SubLevel tracking = Sable.HELPER.getTrackingSubLevel(player);
+        if (tracking != null) return tracking;
+        if (SubLevelContainer.getContainer(level) == null) return null;
+        SubLevel last = Sable.HELPER.getLastTrackingSubLevel(player);
+        if (last == null || last.isRemoved()) return null;
+        return AabbUtil.worldAabb(last).inflate(1.0).intersects(player.getBoundingBox()) ? last : null;
     }
 
     private static boolean isOverlappingPortal(ServerLevel level, SubLevel sub) {
