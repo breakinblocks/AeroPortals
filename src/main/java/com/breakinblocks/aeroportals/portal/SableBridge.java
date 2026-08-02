@@ -51,6 +51,21 @@ public final class SableBridge {
             return null;
         }
 
+        BoundingBox3ic contentBounds = src.getPlot().getBoundingBox();
+        if (contentBounds != BoundingBox3i.EMPTY) {
+            int spanSections = srcLevel.getSectionIndex(contentBounds.maxY()) - srcLevel.getSectionIndex(contentBounds.minY()) + 1;
+            int dstSectionCount = dstLevel.getSectionsCount();
+            if (spanSections > dstSectionCount) {
+                AeroPortals.LOGGER.error("[AeroPortals] SableBridge: sub {} spans {} chunk sections but destination {} only has {}; aborting move so it can stay where it is",
+                        src.getUniqueId(), spanSections, dstLevel.dimension().location(), dstSectionCount);
+                return null;
+            }
+        }
+        if (srcContainer != dstContainer && findFreePlot(dstContainer, 0, 0) == null) {
+            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination container has no free plot; aborting move for sub {}", src.getUniqueId());
+            return null;
+        }
+
         int regionBits = srcContainer.getLogPlotSize() + 4;
         ChunkPos oldPlotPos = src.getPlot().plotPos;
         BlockPos oldRegionMin = new BlockPos(oldPlotPos.x << regionBits, srcLevel.getMinBuildHeight(), oldPlotPos.z << regionBits);
@@ -181,10 +196,16 @@ public final class SableBridge {
         int origPlotZ = plotTag.getInt("plot_z");
 
         int dstSectionCount = dstLevel.getSectionsCount();
-        if (!sectionsFitDestination(plotTag, dstSectionCount)) {
-            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: sub {} is too tall for destination {} ({} sections); aborting move so it can stay where it is",
-                    data.uuid(), dstLevel.dimension().location(), dstSectionCount);
-            return null;
+        int sectionShift = 0;
+        int[] span = sectionSpan(plotTag);
+        if (span != null) {
+            int spanSections = span[1] - span[0] + 1;
+            if (spanSections > dstSectionCount) {
+                AeroPortals.LOGGER.error("[AeroPortals] SableBridge: sub {} spans {} chunk sections but destination {} only has {}; aborting move so it can stay where it is",
+                        data.uuid(), spanSections, dstLevel.dimension().location(), dstSectionCount);
+                return null;
+            }
+            sectionShift = Math.max(0, span[1] - (dstSectionCount - 1));
         }
 
         int[] plot = findFreePlot(dstContainer, origPlotX, origPlotZ);
@@ -196,7 +217,7 @@ public final class SableBridge {
         int shift = dstContainer.getLogPlotSize() + 4;
         int deltaX = (plot[0] - origPlotX) << shift;
         int deltaZ = (plot[1] - origPlotZ) << shift;
-        int deltaY = dstLevel.getMinBuildHeight() - srcMinBuildHeight;
+        int deltaY = dstLevel.getMinBuildHeight() - srcMinBuildHeight - (sectionShift << 4);
 
         if (deltaX != 0 || deltaZ != 0) {
             AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: original plot {},{} occupied in destination; relocating sub {} to free plot {},{} (block shift {},{})",
@@ -204,10 +225,16 @@ public final class SableBridge {
             plotTag.putInt("plot_x", plot[0]);
             plotTag.putInt("plot_z", plot[1]);
         }
+        if (sectionShift > 0) {
+            AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: sub {} sits {} section(s) above destination {} height; shifting plot content down to fit",
+                    data.uuid(), sectionShift, dstLevel.dimension().location());
+            shiftSectionKeys(plotTag, sectionShift);
+        }
         if (deltaX != 0 || deltaY != 0 || deltaZ != 0) {
             if (deltaY != 0) {
-                AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: dimension min-height differs (src {} -> dst {}); shifting block-entity coordinates by {} in Y",
-                        srcMinBuildHeight, dstLevel.getMinBuildHeight(), deltaY);
+                AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: plot content Y shift for sub {} is {} (min-height delta {}, section shift {})",
+                        data.uuid(), deltaY, dstLevel.getMinBuildHeight() - srcMinBuildHeight, sectionShift);
+                stripHeightmaps(plotTag);
             }
             offsetPlotCoordinates(plotTag, deltaX, deltaY, deltaZ);
         }
@@ -217,7 +244,9 @@ public final class SableBridge {
         return new Loaded(loaded, new BlockPos(deltaX, deltaY, deltaZ));
     }
 
-    private static boolean sectionsFitDestination(CompoundTag plotTag, int dstSectionCount) {
+    private static int[] sectionSpan(CompoundTag plotTag) {
+        int min = Integer.MAX_VALUE;
+        int max = Integer.MIN_VALUE;
         CompoundTag chunks = plotTag.getCompound("chunks");
         for (String key : chunks.getAllKeys()) {
             CompoundTag sections = chunks.getCompound(key).getCompound("sections");
@@ -228,12 +257,38 @@ public final class SableBridge {
                 } catch (NumberFormatException e) {
                     continue;
                 }
-                if (idx < 0 || idx >= dstSectionCount) {
-                    return false;
-                }
+                min = Math.min(min, idx);
+                max = Math.max(max, idx);
             }
         }
-        return true;
+        return min == Integer.MAX_VALUE ? null : new int[]{min, max};
+    }
+
+    private static void shiftSectionKeys(CompoundTag plotTag, int sectionShift) {
+        CompoundTag chunks = plotTag.getCompound("chunks");
+        for (String key : chunks.getAllKeys()) {
+            CompoundTag chunkTag = chunks.getCompound(key);
+            CompoundTag sections = chunkTag.getCompound("sections");
+            CompoundTag renumbered = new CompoundTag();
+            for (String sectionKey : sections.getAllKeys()) {
+                int idx;
+                try {
+                    idx = Integer.parseInt(sectionKey);
+                } catch (NumberFormatException e) {
+                    renumbered.put(sectionKey, sections.get(sectionKey));
+                    continue;
+                }
+                renumbered.put(String.valueOf(idx - sectionShift), sections.get(sectionKey));
+            }
+            chunkTag.put("sections", renumbered);
+        }
+    }
+
+    private static void stripHeightmaps(CompoundTag plotTag) {
+        CompoundTag chunks = plotTag.getCompound("chunks");
+        for (String key : chunks.getAllKeys()) {
+            chunks.getCompound(key).remove("heightmaps");
+        }
     }
 
     private static final String[] KINETIC_KEYS = {"Speed", "Source", "Network", "NeedsSpeedUpdate"};

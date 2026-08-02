@@ -34,6 +34,7 @@ public final class ServerTickHandler {
 
         MinecraftServer server = event.getServer();
         PortalTeleport.DeferredClientSyncs.tick(server.getTickCount());
+        PortalTeleport.DeferredVelocityRestores.tick(server.getTickCount());
         PortalTeleport.DeferredRiderSettles.tick(server.getTickCount());
         Ae2SpatialCompat.tick(server);
 

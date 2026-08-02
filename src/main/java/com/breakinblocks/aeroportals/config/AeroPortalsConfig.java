@@ -22,8 +22,8 @@ public final class AeroPortalsConfig {
 
         builder.push("detection");
         VERBOSE_LOGGING = builder
-                .comment("Log every detection scan and teleport attempt at INFO level.")
-                .define("verbose_logging", true);
+                .comment("Write detailed teleport diagnostics to the debug log. Turn on when reporting issues.")
+                .define("verbose_logging", false);
         SCAN_INTERVAL_TICKS = builder
                 .comment("How often (in server ticks) to scan loaded SubLevels for portal contact.")
                 .defineInRange("scan_interval_ticks", 5, 1, 200);

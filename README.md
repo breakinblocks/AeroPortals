@@ -115,7 +115,7 @@ If an optional mod isn't installed, that integration is simply inactive: no erro
 | Key | Default | What it does |
 |---|---|---|
 | `detection.scan_interval_ticks` | `5` | How often the mod checks if your airship is touching a portal (in server ticks; 20 = 1 second). |
-| `detection.verbose_logging` | `true` | Log each teleport at INFO level. Turn off for quieter logs. |
+| `detection.verbose_logging` | `false` | Write detailed teleport diagnostics to the debug log. Turn on when reporting issues. |
 | `detection.max_sublevel_aabb_volume` | `200000.0` | Skip teleporting any ship larger than this volume. Sanity guard so a wildly-misconfigured ship doesn't trigger a teleport. |
 | `teleport.portal_cooldown_ticks` | `200` | After teleporting, the ship is locked out of portals for this long (in ticks). Prevents a ship from immediately re-teleporting back through the destination portal. |
 | `teleport.dest_portal_search_radius` | `128` | How far AeroPortals looks for an existing matching portal at the destination before deciding to build a new one. |

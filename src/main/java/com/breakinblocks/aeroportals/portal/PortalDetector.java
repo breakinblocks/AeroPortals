@@ -30,7 +30,6 @@ public final class PortalDetector {
 
         long now = level.getServer().getTickCount();
         double maxVolume = AeroPortalsConfig.MAX_SUBLEVEL_AABB_VOLUME.get();
-        boolean verbose = AeroPortalsConfig.VERBOSE_LOGGING.get();
 
         for (ServerSubLevel sub : subs) {
             if (sub.isRemoved()) continue;
@@ -38,7 +37,7 @@ public final class PortalDetector {
             AABB aabb = AabbUtil.worldAabb(sub).inflate(1.0);
             double volume = aabb.getXsize() * aabb.getYsize() * aabb.getZsize();
             if (volume > maxVolume) {
-                if (verbose) AeroPortals.LOGGER.debug("[AeroPortals] skipping sub {} (volume {} > max {})", sub.getUniqueId(), volume, maxVolume);
+                AeroPortals.LOGGER.debug("[AeroPortals] skipping sub {} (volume {} > max {})", sub.getUniqueId(), volume, maxVolume);
                 continue;
             }
 
@@ -50,78 +49,83 @@ public final class PortalDetector {
             if (PortalCooldown.isOnCooldown(sub.getUniqueId(), now)) continue;
             if (PortalCooldown.isSuppressedUntilLeftPortal(sub.getUniqueId())) continue;
 
-            switch (hit.kind()) {
-                case NETHER -> {
-                    PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos());
-                    if (srcRect == null) {
-                        AeroPortals.LOGGER.warn("[AeroPortals] nether portal block at {} but rect measurement failed; skipping",
-                                hit.pos());
-                        continue;
-                    }
-                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps nether portal at {} (axis={} {}x{}) in dim {}",
-                            sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
-                            level.dimension().location());
-                    PortalTeleport.teleport(level, sub, srcRect);
+            dispatch(level, sub, hit);
+            PortalCooldown.mark(sub.getUniqueId(), now);
+        }
+    }
+
+    private static void dispatch(ServerLevel level, ServerSubLevel sub, PortalHit hit) {
+        switch (hit.kind()) {
+            case NETHER -> {
+                PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos());
+                if (srcRect == null) {
+                    AeroPortals.LOGGER.warn("[AeroPortals] nether portal block at {} but rect measurement failed; skipping",
+                            hit.pos());
+                    return;
                 }
-                case END -> {
-                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps end portal at {} in dim {}",
-                            sub.getUniqueId(), hit.pos(), level.dimension().location());
-                    PortalTeleport.teleportEnd(level, sub, hit.pos());
+                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps nether portal at {} (axis={} {}x{}) in dim {}",
+                        sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
+                        level.dimension().location());
+                PortalTeleport.teleport(level, sub, srcRect);
+            }
+            case END -> {
+                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps end portal at {} in dim {}",
+                        sub.getUniqueId(), hit.pos(), level.dimension().location());
+                PortalTeleport.teleportEnd(level, sub, hit.pos());
+            }
+            case ARS_NOUVEAU -> {
+                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps ars-nouveau portal at {} in dim {}",
+                        sub.getUniqueId(), hit.pos(), level.dimension().location());
+                PortalTeleport.teleportArsNouveau(level, sub, hit.pos());
+            }
+            case AETHER -> {
+                PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
+                        AetherCompat.portalBlock());
+                if (srcRect == null) {
+                    AeroPortals.LOGGER.warn("[AeroPortals] aether portal block at {} but rect measurement failed; skipping",
+                            hit.pos());
+                    return;
                 }
-                case ARS_NOUVEAU -> {
-                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps ars-nouveau portal at {} in dim {}",
-                            sub.getUniqueId(), hit.pos(), level.dimension().location());
-                    PortalTeleport.teleportArsNouveau(level, sub, hit.pos());
+                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps aether portal at {} (axis={} {}x{}) in dim {}",
+                        sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
+                        level.dimension().location());
+                PortalTeleport.teleportAether(level, sub, srcRect);
+            }
+            case DRACONIC -> {
+                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps draconic portal at {} in dim {}",
+                        sub.getUniqueId(), hit.pos(), level.dimension().location());
+                PortalTeleport.teleportDraconic(level, sub, hit.pos());
+            }
+            case ENDER_GATEWAY -> {
+                PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
+                        CreateEnderGatewayCompat.portalBlock());
+                if (srcRect == null) {
+                    AeroPortals.LOGGER.warn("[AeroPortals] ender gateway block at {} but rect measurement failed; skipping",
+                            hit.pos());
+                    return;
                 }
-                case AETHER -> {
-                    PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
-                            AetherCompat.portalBlock());
-                    if (srcRect == null) {
-                        AeroPortals.LOGGER.warn("[AeroPortals] aether portal block at {} but rect measurement failed; skipping",
-                                hit.pos());
-                        continue;
-                    }
-                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps aether portal at {} (axis={} {}x{}) in dim {}",
-                            sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
-                            level.dimension().location());
-                    PortalTeleport.teleportAether(level, sub, srcRect);
+                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps ender gateway at {} (axis={} {}x{}) in dim {}",
+                        sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
+                        level.dimension().location());
+                PortalTeleport.teleportEnderGateway(level, sub, srcRect, hit.pos());
+            }
+            case CREATE_TELEPORTERS -> {
+                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps create-teleporters portal at {} in dim {}",
+                        sub.getUniqueId(), hit.pos(), level.dimension().location());
+                PortalTeleport.teleportCreateTeleporters(level, sub, hit.pos());
+            }
+            case DEEPER_DARKER -> {
+                PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
+                        DeeperAndDarkerCompat.portalBlock());
+                if (srcRect == null) {
+                    AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker portal block at {} but rect measurement failed; skipping",
+                            hit.pos());
+                    return;
                 }
-                case DRACONIC -> {
-                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps draconic portal at {} in dim {}",
-                            sub.getUniqueId(), hit.pos(), level.dimension().location());
-                    PortalTeleport.teleportDraconic(level, sub, hit.pos());
-                }
-                case ENDER_GATEWAY -> {
-                    PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
-                            CreateEnderGatewayCompat.portalBlock());
-                    if (srcRect == null) {
-                        AeroPortals.LOGGER.warn("[AeroPortals] ender gateway block at {} but rect measurement failed; skipping",
-                                hit.pos());
-                        continue;
-                    }
-                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps ender gateway at {} (axis={} {}x{}) in dim {}",
-                            sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
-                            level.dimension().location());
-                    PortalTeleport.teleportEnderGateway(level, sub, srcRect, hit.pos());
-                }
-                case CREATE_TELEPORTERS -> {
-                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps create-teleporters portal at {} in dim {}",
-                            sub.getUniqueId(), hit.pos(), level.dimension().location());
-                    PortalTeleport.teleportCreateTeleporters(level, sub, hit.pos());
-                }
-                case DEEPER_DARKER -> {
-                    PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
-                            DeeperAndDarkerCompat.portalBlock());
-                    if (srcRect == null) {
-                        AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker portal block at {} but rect measurement failed; skipping",
-                                hit.pos());
-                        continue;
-                    }
-                    AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps deeperdarker portal at {} (axis={} {}x{}) in dim {}",
-                            sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
-                            level.dimension().location());
-                    PortalTeleport.teleportDeeperDarker(level, sub, srcRect);
-                }
+                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps deeperdarker portal at {} (axis={} {}x{}) in dim {}",
+                        sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
+                        level.dimension().location());
+                PortalTeleport.teleportDeeperDarker(level, sub, srcRect);
             }
         }
     }

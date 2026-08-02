@@ -32,6 +32,7 @@ import dev.ryanhcode.sable.sublevel.SubLevel;
 import dev.ryanhcode.sable.companion.math.BoundingBox3i;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.storage.HoldingSubLevel;
+import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import org.joml.Vector3d;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -1463,6 +1464,111 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void velocityHold_subArrivesStoppedThenRegainsMomentum(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        if (srcContainer == null) { helper.fail("srcContainer"); return; }
+
+        if (AeroPortalsConfig.CLEAR_VELOCITY_ON_ARRIVAL.get()) {
+            AeroPortals.LOGGER.info("[AeroPortals/test] clear_velocity_on_arrival is on; hold-and-restore path not exercised");
+            helper.succeed();
+            return;
+        }
+
+        Vector3d launch = new Vector3d(40.0, 0.0, 30.0);
+        UUID[] subUuidRef = new UUID[1];
+        double[] heldSpeedRef = new double[1];
+        int[] heldBefore = {PortalTeleport.DeferredVelocityRestores.heldCount.get()};
+        int[] restoredBefore = {PortalTeleport.DeferredVelocityRestores.restoredCount.get()};
+        int[] skippedBefore = {PortalTeleport.DeferredVelocityRestores.skippedCount.get()};
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    ServerSubLevel sub = assembleTestSub(helper, srcLevel);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    subUuidRef[0] = sub.getUniqueId();
+
+                    srcContainer.physicsSystem().getPipeline()
+                            .addLinearAndAngularVelocity(sub, launch, new Vector3d());
+                    double before = horizontalSpeed(srcContainer, sub);
+                    if (before < 1.0) {
+                        helper.fail("test setup: sub did not take the launch velocity, horizontal speed=" + before);
+                        return;
+                    }
+
+                    Vec3 dstWorld = new Vec3(helper.absolutePos(new BlockPos(7, 4, 7)).getX() / 8.0 + 0.5,
+                            64.5, helper.absolutePos(new BlockPos(7, 4, 7)).getZ() / 8.0 + 0.5);
+                    clearNetherCube(dstLevel, BlockPos.containing(dstWorld), 3);
+                    PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld,
+                            true, "test:velocity_hold");
+
+                    ServerSubLevel arrived = arrivedSub(dstLevel, subUuidRef[0]);
+                    if (arrived == null) { helper.fail("sub not found in destination after teleport"); return; }
+                    heldSpeedRef[0] = horizontalSpeed(SubLevelContainer.getContainer(dstLevel), arrived);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] horizontal speed on arrival = {}", heldSpeedRef[0]);
+                })
+                .thenExecute(() -> {
+                    if (heldSpeedRef[0] > 1.0) {
+                        helper.fail("sub should arrive stopped, but horizontal speed was " + heldSpeedRef[0]);
+                        return;
+                    }
+                    int held = PortalTeleport.DeferredVelocityRestores.heldCount.get() - heldBefore[0];
+                    if (held < 1) {
+                        helper.fail("arrival did not capture the ship's momentum for handback");
+                    }
+                })
+                .thenIdle(30)
+                .thenExecute(() -> {
+                    int restored = PortalTeleport.DeferredVelocityRestores.restoredCount.get() - restoredBefore[0];
+                    int skipped = PortalTeleport.DeferredVelocityRestores.skippedCount.get() - skippedBefore[0];
+                    ServerSubLevel arrived = arrivedSub(dstLevel, subUuidRef[0]);
+                    HoldingSubLevel holding = SubLevelContainer.getContainer(dstLevel)
+                            .getHoldingChunkMap().getHoldingSubLevel(subUuidRef[0]);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] after hold: restored={} skipped={} loaded={} holding={}",
+                            restored, skipped, arrived != null, holding != null);
+
+                    if (restored + skipped == 0) {
+                        helper.fail("hold window expired without the restore ever running");
+                        return;
+                    }
+                    if (arrived == null) {
+                        AeroPortals.LOGGER.warn("[AeroPortals/test] sub left the loaded set inside the hold window"
+                                + " (holding={}); restore correctly skipped, momentum handback not asserted", holding != null);
+                        return;
+                    }
+                    double after = horizontalSpeed(SubLevelContainer.getContainer(dstLevel), arrived);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] horizontal speed after hold = {}", after);
+                    if (after < 1.0) {
+                        helper.fail("momentum was never restored after the hold window; horizontal speed=" + after);
+                    }
+                })
+                .thenSucceed();
+    }
+
+    private static ServerSubLevel assembleTestSub(GameTestHelper helper, ServerLevel srcLevel) {
+        BlockPos local = new BlockPos(7, 4, 7);
+        BlockPos worldPos = helper.absolutePos(local);
+        helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+        BoundingBox3i bounds = new BoundingBox3i(
+                worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+        return SubLevelAssemblyHelper.assembleBlocks(srcLevel, worldPos, List.of(worldPos), bounds);
+    }
+
+    private static ServerSubLevel arrivedSub(ServerLevel dstLevel, UUID id) {
+        ServerSubLevelContainer container = SubLevelContainer.getContainer(dstLevel);
+        if (container == null || id == null) return null;
+        return container.getSubLevel(id) instanceof ServerSubLevel s ? s : null;
+    }
+
+    private static double horizontalSpeed(ServerSubLevelContainer container, ServerSubLevel sub) {
+        Vector3d velocity = container.physicsSystem().getPipeline().getLinearVelocity(sub, new Vector3d());
+        return Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+    }
+
     @GameTest(template = EMPTY, timeoutTicks = 100)
     public static void command_parseDestination_coordinateForms(GameTestHelper helper) {
         var plain = AeroPortalsCommands.parseDestination("kubejs:deep_space");
@@ -2180,6 +2286,233 @@ public class PortalGameTests {
                     if (inDst) {
                         helper.fail("sub should not be present in destination after a failed move");
                         return;
+                    }
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void sableBridge_tallShipAboveDestinationRange_shiftsDownAndFits(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
+        if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
+
+        UUID[] subUuidRef = new UUID[1];
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos base = helper.absolutePos(new BlockPos(7, 4, 7));
+                    BlockPos anchor = new BlockPos(base.getX(), 100, base.getZ());
+                    BlockPos top = anchor.above(150);
+                    srcLevel.setBlock(anchor, Blocks.OBSIDIAN.defaultBlockState(), 3);
+                    srcLevel.setBlock(top, Blocks.OBSIDIAN.defaultBlockState(), 3);
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            anchor.getX() - 1, anchor.getY() - 1, anchor.getZ() - 1,
+                            top.getX() + 1, top.getY() + 1, top.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, anchor, List.of(anchor, top), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    subUuidRef[0] = sub.getUniqueId();
+
+                    SableBridge.Moved moved = SableBridge.moveAcrossDimensions(sub, srcLevel, dstLevel,
+                            new Vec3(anchor.getX() + 0.5, 128.0, anchor.getZ() + 0.5));
+                    if (moved == null) {
+                        helper.fail("150-block-tall sub should fit the nether after a section shift, but the move was aborted");
+                        return;
+                    }
+
+                    ServerSubLevel arrived = (ServerSubLevel) dstContainer.getSubLevel(subUuidRef[0]);
+                    if (arrived == null) {
+                        helper.fail("sub not present in destination container after successful move");
+                        return;
+                    }
+                    BoundingBox3i plotBounds = new BoundingBox3i(arrived.getPlot().getBoundingBox());
+                    AeroPortals.LOGGER.info("[AeroPortals/test] tall-ship shift: dst plot bounds y [{}, {}]",
+                            plotBounds.minY(), plotBounds.maxY());
+                    if (plotBounds.maxY() - plotBounds.minY() != 150) {
+                        helper.fail("plot content height changed across the move: y span " + (plotBounds.maxY() - plotBounds.minY()));
+                        return;
+                    }
+                    if (plotBounds.minY() < dstLevel.getMinBuildHeight() || plotBounds.maxY() >= dstLevel.getMaxBuildHeight()) {
+                        helper.fail("plot content [" + plotBounds.minY() + ", " + plotBounds.maxY()
+                                + "] is outside the destination build range after the shift");
+                        return;
+                    }
+
+                    dstContainer.removeSubLevel(arrived, SubLevelRemovalReason.REMOVED);
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void sableBridge_shipTallerThanDestination_abortsWithoutRemovingSub(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        if (srcContainer == null) { helper.fail("srcContainer"); return; }
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos base = helper.absolutePos(new BlockPos(7, 4, 7));
+                    BlockPos anchor = new BlockPos(base.getX(), 105, base.getZ());
+                    BlockPos bottom = anchor.below(150);
+                    BlockPos top = anchor.above(150);
+                    srcLevel.setBlock(bottom, Blocks.OBSIDIAN.defaultBlockState(), 3);
+                    srcLevel.setBlock(anchor, Blocks.OBSIDIAN.defaultBlockState(), 3);
+                    srcLevel.setBlock(top, Blocks.OBSIDIAN.defaultBlockState(), 3);
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            bottom.getX() - 1, bottom.getY() - 1, bottom.getZ() - 1,
+                            top.getX() + 1, top.getY() + 1, top.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, anchor, List.of(bottom, anchor, top), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    UUID id = sub.getUniqueId();
+
+                    SableBridge.Moved moved = SableBridge.moveAcrossDimensions(sub, srcLevel, dstLevel,
+                            new Vec3(anchor.getX() + 0.5, 128.0, anchor.getZ() + 0.5));
+                    if (moved != null) {
+                        helper.fail("301-block-tall sub cannot fit a 256-block dimension; move should have been aborted");
+                        return;
+                    }
+
+                    SubLevel stillThere = srcContainer.getSubLevel(id);
+                    if (stillThere != sub) {
+                        helper.fail("aborted move must leave the original sub instance untouched (no remove/restore cycle); got "
+                                + stillThere);
+                        return;
+                    }
+
+                    srcContainer.removeSubLevel(sub, SubLevelRemovalReason.REMOVED);
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200, batch = "aeroportalsIsolated")
+    public static void portalDetector_failedTeleport_armsCooldown(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel endLevel = srcLevel.getServer().getLevel(Level.END);
+        if (endLevel == null) { helper.fail("End not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        ServerSubLevelContainer endContainer = SubLevelContainer.getContainer(endLevel);
+        if (srcContainer == null || endContainer == null) { helper.fail("containers"); return; }
+
+        ServerSubLevel[] subRef = new ServerSubLevel[1];
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    subRef[0] = sub;
+                })
+                .thenIdle(3)
+                .thenExecute(() -> {
+                    ServerSubLevel sub = subRef[0];
+                    UUID id = sub.getUniqueId();
+
+                    helper.setBlock(new BlockPos(7, 4, 7), Blocks.END_PORTAL.defaultBlockState());
+
+                    BitSet occ = endContainer.getOccupancy();
+                    BitSet saved = (BitSet) occ.clone();
+                    int side = 1 << endContainer.getLogSideLength();
+                    occ.set(0, side * side);
+                    try {
+                        PortalDetector.scan(srcLevel);
+                    } finally {
+                        occ.clear();
+                        occ.or(saved);
+                    }
+
+                    long now = srcLevel.getServer().getTickCount();
+                    SubLevel stillThere = srcContainer.getSubLevel(id);
+                    if (stillThere != sub) {
+                        helper.fail("failed teleport must leave the original sub instance in place (no remove/restore cycle); got " + stillThere);
+                        return;
+                    }
+                    if (!PortalCooldown.isOnCooldown(id, now)) {
+                        helper.fail("failed teleport attempt should arm the portal cooldown so it does not retry every scan");
+                        return;
+                    }
+
+                    srcContainer.removeSubLevel(sub, SubLevelRemovalReason.REMOVED);
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(template = EMPTY, timeoutTicks = 200)
+    public static void endPortal_blockedLanding_raisesAboveTerrain(GameTestHelper helper) {
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel endLevel = srcLevel.getServer().getLevel(Level.END);
+        if (endLevel == null) { helper.fail("End not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        if (srcContainer == null) { helper.fail("srcContainer"); return; }
+
+        BlockPos landing = EndPortalLanding.SPAWN_POINT;
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    sub.updateBoundingBox();
+
+                    endLevel.getChunk(landing.getX() >> 4, landing.getZ() >> 4);
+                    try {
+                        for (int dx = -2; dx <= 2; dx++) {
+                            for (int dy = 0; dy <= 2; dy++) {
+                                for (int dz = -2; dz <= 2; dz++) {
+                                    endLevel.setBlock(landing.offset(dx, dy, dz),
+                                            Blocks.END_STONE_BRICKS.defaultBlockState(), 3);
+                                }
+                            }
+                        }
+
+                        Vec3 blockedLanding = EndPortalLanding.landingPosition(sub);
+                        Vec3 raised = PortalTeleport.raiseLandingUntilClear(endLevel, sub, blockedLanding);
+                        AeroPortals.LOGGER.info("[AeroPortals/test] end-raised-landing: blocked={} raised={}",
+                                blockedLanding, raised);
+
+                        if (raised.y < blockedLanding.y + 3.0 - 1.0e-6) {
+                            helper.fail("landing should be raised by 3 blocks to clear the bricks at y50-52; got y="
+                                    + raised.y + " (was y=" + blockedLanding.y + ")");
+                            return;
+                        }
+                        if (raised.x != blockedLanding.x || raised.z != blockedLanding.z) {
+                            helper.fail("raise must only change Y; got " + raised + " from " + blockedLanding);
+                            return;
+                        }
+                    } finally {
+                        for (int dx = -2; dx <= 2; dx++) {
+                            for (int dy = 0; dy <= 2; dy++) {
+                                for (int dz = -2; dz <= 2; dz++) {
+                                    endLevel.setBlock(landing.offset(dx, dy, dz),
+                                            Blocks.AIR.defaultBlockState(), 3);
+                                }
+                            }
+                        }
+                        if (!sub.isRemoved() && srcContainer.getSubLevel(sub.getUniqueId()) != null) {
+                            srcContainer.removeSubLevel(sub, SubLevelRemovalReason.REMOVED);
+                        }
                     }
                 })
                 .thenSucceed();
