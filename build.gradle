@@ -114,6 +114,12 @@ repositories {
 		}
 	}
 	maven {
+		url = "https://maven.saps.dev/minecraft"
+		content {
+			includeGroup("dev.latvian.mods")
+		}
+	}
+	maven {
 		url = "https://api.modrinth.com/maven"
 		content { includeGroup("maven.modrinth") }
 	}
@@ -131,6 +137,11 @@ dependencies {
 	compileOnly("dev.ryanhcode.sable:sable-neoforge-1.21.1:1.2.2") { transitive = false }
 	localRuntime("dev.ryanhcode.sable:sable-neoforge-1.21.1:1.2.2") { transitive = false }
 	compileOnly("dev.ryanhcode.sable-companion:sable-companion-common-1.21.1:1.6.0") { transitive = false }
+
+	compileOnly("dev.latvian.mods:kubejs-neoforge:${kubejs_version}") { transitive = false }
+	compileOnly("dev.latvian.mods:rhino:${rhino_version}") { transitive = false }
+	localRuntime("dev.latvian.mods:kubejs-neoforge:${kubejs_version}") { transitive = false }
+	localRuntime("dev.latvian.mods:rhino:${rhino_version}") { transitive = false }
 
 	localRuntime("com.hollingsworth.ars_nouveau:ars_nouveau-1.21.1:5.11.5.1336") { transitive = false }
 	localRuntime("software.bernie.geckolib:geckolib-neoforge-1.21.1:4.8.4") { transitive = false }
@@ -199,8 +210,15 @@ tasks.register('copyGameTestStructures', Copy) {
 	include '*.snbt'
 }
 
+tasks.register('copyGameTestKubeScripts', Copy) {
+	from "src/gametest/kubejs"
+	into "run-gametest/kubejs"
+	include '**/*.js'
+}
+
 tasks.named('runGameTestServer').configure {
 	dependsOn 'copyGameTestStructures'
+	dependsOn 'copyGameTestKubeScripts'
 }
 
 publishing {
@@ -253,17 +271,31 @@ tasks.named('publishMods') {
 	}
 }
 
+static boolean isVersionAlreadyPublished(Throwable error) {
+	def signals = ['status code 409', 'status code 405', 'already exists', 'cannot overwrite', 'does not allow updating']
+	def seen = new java.util.IdentityHashMap<Throwable, Boolean>()
+	for (Throwable cursor = error; cursor != null && seen.put(cursor, true) == null; cursor = cursor.cause) {
+		def message = cursor.message?.toLowerCase()
+		if (message != null && signals.any { message.contains(it) }) {
+			return true
+		}
+	}
+	return false
+}
+
 afterEvaluate {
 	def mavenTask = tasks.findByName('publishMavenJavaPublicationToBreakInBlocksRepository')
 	if (mavenTask != null) {
 		def originalActions = new ArrayList<>(mavenTask.actions)
 		mavenTask.actions.clear()
-		mavenTask.doLast('Tolerant Maven publish') {
-			originalActions.each { action ->
-				try {
-					action.execute(mavenTask)
-				} catch (Exception e) {
-					logger.warn("Maven publish failed (continuing anyway): ${e.message}")
+		mavenTask.doLast('Tolerate republishing an existing version') {
+			try {
+				originalActions.each { action -> action.execute(mavenTask) }
+			} catch (Exception e) {
+				if (isVersionAlreadyPublished(e)) {
+					logger.lifecycle("Maven already has ${project.version}; leaving the published artifact as it is")
+				} else {
+					throw e
 				}
 			}
 		}

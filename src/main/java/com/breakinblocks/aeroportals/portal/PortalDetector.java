@@ -1,13 +1,11 @@
 package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.AeroPortals;
-import com.breakinblocks.aeroportals.compat.AetherCompat;
-import com.breakinblocks.aeroportals.compat.CreateEnderGatewayCompat;
-import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
+import com.breakinblocks.aeroportals.api.AeroPortalType;
+import com.breakinblocks.aeroportals.api.AeroPortalsApi;
+import com.breakinblocks.aeroportals.api.PortalDestination;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import com.breakinblocks.aeroportals.util.AabbUtil;
-import com.breakinblocks.aeroportals.util.PortalGeom;
-import com.breakinblocks.aeroportals.util.PortalRect;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
@@ -55,82 +53,26 @@ public final class PortalDetector {
     }
 
     private static void dispatch(ServerLevel level, ServerSubLevel sub, PortalHit hit) {
-        switch (hit.kind()) {
-            case NETHER -> {
-                PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos());
-                if (srcRect == null) {
-                    AeroPortals.LOGGER.warn("[AeroPortals] nether portal block at {} but rect measurement failed; skipping",
-                            hit.pos());
-                    return;
-                }
-                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps nether portal at {} (axis={} {}x{}) in dim {}",
-                        sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
-                        level.dimension().location());
-                PortalTeleport.teleport(level, sub, srcRect);
-            }
-            case END -> {
-                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps end portal at {} in dim {}",
-                        sub.getUniqueId(), hit.pos(), level.dimension().location());
-                PortalTeleport.teleportEnd(level, sub, hit.pos());
-            }
-            case ARS_NOUVEAU -> {
-                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps ars-nouveau portal at {} in dim {}",
-                        sub.getUniqueId(), hit.pos(), level.dimension().location());
-                PortalTeleport.teleportArsNouveau(level, sub, hit.pos());
-            }
-            case AETHER -> {
-                PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
-                        AetherCompat.portalBlock());
-                if (srcRect == null) {
-                    AeroPortals.LOGGER.warn("[AeroPortals] aether portal block at {} but rect measurement failed; skipping",
-                            hit.pos());
-                    return;
-                }
-                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps aether portal at {} (axis={} {}x{}) in dim {}",
-                        sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
-                        level.dimension().location());
-                PortalTeleport.teleportAether(level, sub, srcRect);
-            }
-            case DRACONIC -> {
-                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps draconic portal at {} in dim {}",
-                        sub.getUniqueId(), hit.pos(), level.dimension().location());
-                PortalTeleport.teleportDraconic(level, sub, hit.pos());
-            }
-            case ENDER_GATEWAY -> {
-                PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
-                        CreateEnderGatewayCompat.portalBlock());
-                if (srcRect == null) {
-                    AeroPortals.LOGGER.warn("[AeroPortals] ender gateway block at {} but rect measurement failed; skipping",
-                            hit.pos());
-                    return;
-                }
-                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps ender gateway at {} (axis={} {}x{}) in dim {}",
-                        sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
-                        level.dimension().location());
-                PortalTeleport.teleportEnderGateway(level, sub, srcRect, hit.pos());
-            }
-            case CREATE_TELEPORTERS -> {
-                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps create-teleporters portal at {} in dim {}",
-                        sub.getUniqueId(), hit.pos(), level.dimension().location());
-                PortalTeleport.teleportCreateTeleporters(level, sub, hit.pos());
-            }
-            case DEEPER_DARKER -> {
-                PortalRect srcRect = PortalGeom.measureFromBlock(level, hit.pos(),
-                        DeeperAndDarkerCompat.portalBlock());
-                if (srcRect == null) {
-                    AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker portal block at {} but rect measurement failed; skipping",
-                            hit.pos());
-                    return;
-                }
-                AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps deeperdarker portal at {} (axis={} {}x{}) in dim {}",
-                        sub.getUniqueId(), srcRect.minCorner(), srcRect.axis(), srcRect.width(), srcRect.height(),
-                        level.dimension().location());
-                PortalTeleport.teleportDeeperDarker(level, sub, srcRect);
-            }
+        AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps {} portal at {} in dim {}",
+                sub.getUniqueId(), hit.type().id(), hit.pos(), level.dimension().location());
+
+        PortalDestination destination;
+        try {
+            destination = hit.type().resolve(level, sub, hit.pos());
+        } catch (RuntimeException e) {
+            AeroPortals.LOGGER.error("[AeroPortals] portal type {} threw while resolving a destination at {}",
+                    hit.type().id(), hit.pos(), e);
+            return;
         }
+        if (destination == null) {
+            AeroPortals.LOGGER.debug("[AeroPortals] portal type {} at {} produced no destination; skipping",
+                    hit.type().id(), hit.pos());
+            return;
+        }
+        PortalTeleport.dispatch(level, sub, destination);
     }
 
-    private record PortalHit(BlockPos pos, PortalKind kind) {}
+    private record PortalHit(BlockPos pos, AeroPortalType type) {}
 
     private static PortalHit findPortalBlock(ServerLevel level, AABB aabb) {
         int x0 = (int) Math.floor(aabb.minX);
@@ -147,8 +89,8 @@ public final class PortalDetector {
                     cursor.set(x, y, z);
                     if (!level.isLoaded(cursor)) continue;
                     BlockState state = level.getBlockState(cursor);
-                    PortalKind kind = PortalKind.ofBlock(state);
-                    if (kind != null) return new PortalHit(cursor.immutable(), kind);
+                    AeroPortalType type = AeroPortalsApi.findPortalType(state);
+                    if (type != null) return new PortalHit(cursor.immutable(), type);
                 }
             }
         }

@@ -1,6 +1,9 @@
 package com.breakinblocks.aeroportals;
 
+import com.breakinblocks.aeroportals.compat.BuiltinCarriers;
+import com.breakinblocks.aeroportals.compat.BuiltinNbtFixups;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
+import com.breakinblocks.aeroportals.portal.BuiltinPortalTypes;
 import com.mojang.logging.LogUtils;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
@@ -47,6 +50,9 @@ public class AeroPortals {
         event.enqueueWork(() -> {
             sableLoaded = ModList.get().isLoaded("sable");
             LOGGER.debug("[AeroPortals] common setup: sable loaded={}", sableLoaded);
+            BuiltinPortalTypes.register();
+            BuiltinCarriers.register();
+            BuiltinNbtFixups.register();
             if (!sableLoaded) {
                 LOGGER.warn("[AeroPortals] Sable mod not detected - AeroPortals will be dormant. Loaded mod ids:");
                 ModList.get().getMods().forEach(m -> LOGGER.warn("[AeroPortals]   - {}", m.getModId()));

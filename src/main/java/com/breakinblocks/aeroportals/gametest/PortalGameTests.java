@@ -12,7 +12,7 @@ import com.breakinblocks.aeroportals.compat.TropicraftCompat;
 import com.breakinblocks.aeroportals.portal.EndPortalLanding;
 import com.breakinblocks.aeroportals.portal.PortalCooldown;
 import com.breakinblocks.aeroportals.portal.PortalDetector;
-import com.breakinblocks.aeroportals.portal.PortalKind;
+import com.breakinblocks.aeroportals.api.AeroPortalsApi;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.portal.TeleportJournal;
 import com.breakinblocks.aeroportals.util.PortalBuilder;
@@ -1166,14 +1166,12 @@ public class PortalGameTests {
                 available, ModList.get().isLoaded(ArsNouveauCompat.MOD_ID));
 
         
-        PortalKind onAir = PortalKind.ofBlock(Blocks.AIR.defaultBlockState());
-        if (onAir != null) {
-            helper.fail("PortalKind.ofBlock should return null for AIR, got " + onAir);
+        if (AeroPortalsApi.isPortalBlock(Blocks.AIR.defaultBlockState())) {
+            helper.fail("AeroPortalsApi.isPortalBlock should be false for AIR");
             return;
         }
-        PortalKind onObsidian = PortalKind.ofBlock(Blocks.OBSIDIAN.defaultBlockState());
-        if (onObsidian != null) {
-            helper.fail("PortalKind.ofBlock should return null for OBSIDIAN, got " + onObsidian);
+        if (AeroPortalsApi.isPortalBlock(Blocks.OBSIDIAN.defaultBlockState())) {
+            helper.fail("AeroPortalsApi.isPortalBlock should be false for OBSIDIAN");
             return;
         }
 

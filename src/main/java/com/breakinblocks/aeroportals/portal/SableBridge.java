@@ -1,8 +1,10 @@
 package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.api.AeroPortalsApi;
+import com.breakinblocks.aeroportals.api.TransferCarrier;
+import com.breakinblocks.aeroportals.api.nbt.NbtFixContext;
 import com.breakinblocks.aeroportals.compat.CreateContraptionCompat;
-import com.breakinblocks.aeroportals.compat.SimulatedCompat;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.BoundingBox3i;
@@ -19,17 +21,22 @@ import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -37,6 +44,13 @@ public final class SableBridge {
     private SableBridge() {}
 
     public record Moved(ServerSubLevel sub, BlockPos shift, BlockPos oldRegionMin, int regionBlocks) {}
+
+    public record SourceInfo(ResourceKey<Level> dimension, int minBuildHeight, Vec3 worldTranslation,
+                             BlockPos regionMin, int regionBlocks) {
+        public static SourceInfo of(ResourceKey<Level> dimension, int minBuildHeight) {
+            return new SourceInfo(dimension, minBuildHeight, Vec3.ZERO, null, 0);
+        }
+    }
 
     public static Moved moveAcrossDimensions(
             ServerSubLevel src,
@@ -71,9 +85,7 @@ public final class SableBridge {
         BlockPos oldRegionMin = new BlockPos(oldPlotPos.x << regionBits, srcLevel.getMinBuildHeight(), oldPlotPos.z << regionBits);
         int regionBlocks = 1 << regionBits;
 
-        List<BlockPos> assembledBearings = CreateContraptionCompat.disassembleAssemblies(srcLevel, src);
-        List<AABB> superGlue = CreateContraptionCompat.captureGlue(srcLevel, src);
-        List<AABB> honeyGlue = SimulatedCompat.captureHoneyGlue(srcLevel, src);
+        Map<TransferCarrier<?>, Object> carried = captureCarriers(srcLevel, src);
         CreateContraptionCompat.KineticSnapshot kinetics = CreateContraptionCompat.collectKinetics(srcLevel, src);
 
         SubLevelData data = SubLevelSerializer.toData(src, List.of());
@@ -85,6 +97,7 @@ public final class SableBridge {
 
         CompoundTag poseTag = tag.getCompound("pose");
         Pose3d pose = SableNBTUtils.readPose3d(poseTag);
+        Vec3 srcWorldPos = new Vec3(pose.position().x(), pose.position().y(), pose.position().z());
         pose.position().set(dstWorldPos.x, dstWorldPos.y, dstWorldPos.z);
         tag.put("pose", SableNBTUtils.writePose3d(pose));
 
@@ -96,9 +109,12 @@ public final class SableBridge {
         srcContainer.removeSubLevel(src, SubLevelRemovalReason.REMOVED);
         AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: removed source sub-level");
 
+        SourceInfo sourceInfo = new SourceInfo(srcLevel.dimension(), srcLevel.getMinBuildHeight(),
+                dstWorldPos.subtract(srcWorldPos), oldRegionMin, regionBlocks);
+
         Loaded loaded;
         try {
-            loaded = reloadInDestination(srcLevel.getMinBuildHeight(), dstLevel, dstContainer, data);
+            loaded = reloadInDestination(sourceInfo, dstLevel, dstContainer, data);
         } catch (RuntimeException e) {
             AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination load threw for sub {}; will restore to source", data.uuid(), e);
             loaded = null;
@@ -107,15 +123,13 @@ public final class SableBridge {
         if (loaded != null) {
             AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: loaded into {} at {}",
                     dstLevel.dimension().location(), loaded.sub().logicalPose().position());
-            CreateContraptionCompat.replayGlue(dstLevel, superGlue, loaded.shift());
-            SimulatedCompat.replayHoneyGlue(dstLevel, honeyGlue, loaded.shift());
-            CreateContraptionCompat.reassemble(dstLevel, assembledBearings, loaded.shift());
+            replayCarriers(dstLevel, loaded.sub(), carried, loaded.shift());
             CreateContraptionCompat.reactivateGenerators(dstLevel, kinetics.generatorPositions(), loaded.shift());
             TeleportJournal.delete(srcLevel.getServer(), data.uuid());
             return new Moved(loaded.sub(), loaded.shift(), oldRegionMin, regionBlocks);
         }
 
-        if (restoreToSource(srcLevel, srcContainer, sourceSnapshot, data.uuid(), assembledBearings, superGlue, honeyGlue, kinetics)) {
+        if (restoreToSource(srcLevel, srcContainer, sourceSnapshot, data.uuid(), oldRegionMin, regionBlocks, carried, kinetics)) {
             TeleportJournal.delete(srcLevel.getServer(), data.uuid());
         } else {
             AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination load AND source restore failed for sub {}; left in journal for recovery on next start", data.uuid());
@@ -124,31 +138,68 @@ public final class SableBridge {
     }
 
     private static boolean restoreToSource(ServerLevel srcLevel, ServerSubLevelContainer srcContainer, CompoundTag sourceSnapshot, UUID uuid,
-                                           List<BlockPos> assembledBearings, List<AABB> superGlue, List<AABB> honeyGlue,
+                                           BlockPos oldRegionMin, int regionBlocks,
+                                           Map<TransferCarrier<?>, Object> carried,
                                            CreateContraptionCompat.KineticSnapshot kinetics) {
         SubLevelData restoreData = SubLevelSerializer.fromData(sourceSnapshot);
         if (restoreData == null) return false;
+        SourceInfo sourceInfo = new SourceInfo(srcLevel.dimension(), srcLevel.getMinBuildHeight(),
+                Vec3.ZERO, oldRegionMin, regionBlocks);
         Loaded restored;
         try {
-            restored = reloadInDestination(srcLevel.getMinBuildHeight(), srcLevel, srcContainer, restoreData);
+            restored = reloadInDestination(sourceInfo, srcLevel, srcContainer, restoreData);
         } catch (RuntimeException e) {
             AeroPortals.LOGGER.error("[AeroPortals] SableBridge: source restore threw for sub {}", uuid, e);
             return false;
         }
         if (restored == null) return false;
-        CreateContraptionCompat.replayGlue(srcLevel, superGlue, restored.shift());
-        SimulatedCompat.replayHoneyGlue(srcLevel, honeyGlue, restored.shift());
-        CreateContraptionCompat.reassemble(srcLevel, assembledBearings, restored.shift());
+        replayCarriers(srcLevel, restored.sub(), carried, restored.shift());
         CreateContraptionCompat.reactivateGenerators(srcLevel, kinetics.generatorPositions(), restored.shift());
         AeroPortals.LOGGER.warn("[AeroPortals] SableBridge: destination load failed; restored sub {} to source {} (teleport cancelled)",
                 uuid, srcLevel.dimension().location());
         return true;
     }
 
+    private static Map<TransferCarrier<?>, Object> captureCarriers(ServerLevel srcLevel, ServerSubLevel sub) {
+        List<TransferCarrier<?>> carriers = AeroPortalsApi.carriers();
+        if (carriers.isEmpty()) return Map.of();
+        Map<TransferCarrier<?>, Object> captured = new LinkedHashMap<>(carriers.size());
+        for (TransferCarrier<?> carrier : carriers) {
+            try {
+                Object value = carrier.capture(srcLevel, sub);
+                if (value != null) captured.put(carrier, value);
+            } catch (RuntimeException e) {
+                AeroPortals.LOGGER.error("[AeroPortals] transfer carrier {} threw during capture of sub {}",
+                        carrier.id(), sub.getUniqueId(), e);
+            }
+        }
+        return captured;
+    }
+
+    private static void replayCarriers(ServerLevel level, ServerSubLevel newSub, Map<TransferCarrier<?>, Object> captured, BlockPos shift) {
+        if (captured.isEmpty()) return;
+        List<Map.Entry<TransferCarrier<?>, Object>> entries = new ArrayList<>(captured.entrySet());
+        Collections.reverse(entries);
+        for (Map.Entry<TransferCarrier<?>, Object> entry : entries) {
+            try {
+                replayOne(entry.getKey(), level, newSub, entry.getValue(), shift);
+            } catch (RuntimeException e) {
+                AeroPortals.LOGGER.error("[AeroPortals] transfer carrier {} threw during replay on sub {}",
+                        entry.getKey().id(), newSub.getUniqueId(), e);
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> void replayOne(TransferCarrier<T> carrier, ServerLevel level, ServerSubLevel newSub, Object captured, BlockPos shift) {
+        carrier.replay(level, newSub, (T) captured, shift);
+    }
+
     public record Loaded(ServerSubLevel sub, BlockPos shift) {}
 
-    public static Loaded reloadInDestination(int srcMinBuildHeight, ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
-        Loaded loaded = tryLoad(srcMinBuildHeight, dstLevel, dstContainer, data);
+    public static Loaded reloadInDestination(SourceInfo source, ServerLevel dstLevel,
+                                             ServerSubLevelContainer dstContainer, SubLevelData data) {
+        Loaded loaded = tryLoad(source, dstLevel, dstContainer, data);
         if (loaded != null) {
             rebuildPhysicsData(dstLevel, loaded.sub(), dstContainer);
         }
@@ -189,7 +240,8 @@ public final class SableBridge {
                 sub.getMassTracker().isInvalid(), sub.getMassTracker().getMass());
     }
 
-    private static Loaded tryLoad(int srcMinBuildHeight, ServerLevel dstLevel, ServerSubLevelContainer dstContainer, SubLevelData data) {
+    private static Loaded tryLoad(SourceInfo source, ServerLevel dstLevel,
+                                  ServerSubLevelContainer dstContainer, SubLevelData data) {
         CompoundTag tag = data.fullTag();
         CompoundTag plotTag = tag.getCompound("plot");
         int origPlotX = plotTag.getInt("plot_x");
@@ -217,7 +269,7 @@ public final class SableBridge {
         int shift = dstContainer.getLogPlotSize() + 4;
         int deltaX = (plot[0] - origPlotX) << shift;
         int deltaZ = (plot[1] - origPlotZ) << shift;
-        int deltaY = dstLevel.getMinBuildHeight() - srcMinBuildHeight - (sectionShift << 4);
+        int deltaY = dstLevel.getMinBuildHeight() - source.minBuildHeight() - (sectionShift << 4);
 
         if (deltaX != 0 || deltaZ != 0) {
             AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: original plot {},{} occupied in destination; relocating sub {} to free plot {},{} (block shift {},{})",
@@ -233,15 +285,36 @@ public final class SableBridge {
         if (deltaX != 0 || deltaY != 0 || deltaZ != 0) {
             if (deltaY != 0) {
                 AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: plot content Y shift for sub {} is {} (min-height delta {}, section shift {})",
-                        data.uuid(), deltaY, dstLevel.getMinBuildHeight() - srcMinBuildHeight, sectionShift);
+                        data.uuid(), deltaY, dstLevel.getMinBuildHeight() - source.minBuildHeight(), sectionShift);
                 stripHeightmaps(plotTag);
             }
             offsetPlotCoordinates(plotTag, deltaX, deltaY, deltaZ);
         }
 
+        applyNbtFixers(plotTag, new NbtFixContext(
+                data.uuid(), source.dimension(), dstLevel.dimension(), new BlockPos(deltaX, deltaY, deltaZ),
+                source.worldTranslation(), source.regionMin(), source.regionBlocks()));
+
         ServerSubLevel loaded = SubLevelSerializer.fullyLoad(dstLevel, data);
         if (loaded == null) return null;
         return new Loaded(loaded, new BlockPos(deltaX, deltaY, deltaZ));
+    }
+
+    private static void applyNbtFixers(CompoundTag plotTag, NbtFixContext context) {
+        if (!AeroPortalsApi.hasNbtFixers()) return;
+        if (!context.moved() && !context.dimensionChanged()) return;
+        int visited = 0;
+        CompoundTag chunks = plotTag.getCompound("chunks");
+        for (String key : chunks.getAllKeys()) {
+            ListTag blockEntities = chunks.getCompound(key).getList("block_entities", Tag.TAG_COMPOUND);
+            for (int i = 0; i < blockEntities.size(); i++) {
+                AeroPortalsApi.applyNbtFixers(blockEntities.getCompound(i), context);
+                visited++;
+            }
+        }
+        AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: ran NBT fixers over {} block entit(ies) for sub {} (shift {}, {} -> {})",
+                visited, context.subUuid(), context.plotShift(),
+                context.srcDimensionId(), context.dstDimensionId());
     }
 
     private static int[] sectionSpan(CompoundTag plotTag) {

@@ -7,7 +7,7 @@ import dev.ryanhcode.sable.api.entity.EntitySubLevelUtil;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.BoundingBox3d;
 import dev.ryanhcode.sable.sublevel.SubLevel;
-import com.breakinblocks.aeroportals.portal.PortalKind;
+import com.breakinblocks.aeroportals.api.AeroPortalsApi;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -87,7 +87,7 @@ public final class VanillaPortalCanceller {
                 for (int z = z0; z <= z1; z++) {
                     cursor.set(x, y, z);
                     if (!level.isLoaded(cursor)) continue;
-                    if (PortalKind.ofBlock(level.getBlockState(cursor)) != null) return true;
+                    if (AeroPortalsApi.isPortalBlock(level.getBlockState(cursor))) return true;
                 }
             }
         }

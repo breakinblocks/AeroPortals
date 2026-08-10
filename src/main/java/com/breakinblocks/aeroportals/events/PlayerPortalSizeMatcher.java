@@ -4,7 +4,6 @@ import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
-import com.breakinblocks.aeroportals.portal.PortalKind;
 import com.breakinblocks.aeroportals.util.PortalBuilder;
 import com.breakinblocks.aeroportals.util.PortalGeom;
 import com.breakinblocks.aeroportals.util.PortalRect;
@@ -36,7 +35,18 @@ public final class PlayerPortalSizeMatcher {
 
     private static final Map<UUID, Captured> pending = new ConcurrentHashMap<>();
 
-    private record Captured(PortalKind kind, PortalRect rect) {}
+    private enum FramedPortal {
+        NETHER, AETHER, DEEPER_DARKER;
+
+        static FramedPortal of(BlockState state) {
+            if (state.is(Blocks.NETHER_PORTAL)) return NETHER;
+            if (AetherCompat.isPortalBlock(state)) return AETHER;
+            if (DeeperAndDarkerCompat.isPortalBlock(state)) return DEEPER_DARKER;
+            return null;
+        }
+    }
+
+    private record Captured(FramedPortal kind, PortalRect rect) {}
 
     private PlayerPortalSizeMatcher() {}
 
@@ -82,7 +92,7 @@ public final class PlayerPortalSizeMatcher {
                 for (int z = (int) Math.floor(box.minZ); z <= (int) Math.floor(box.maxZ); z++) {
                     cursor.set(x, y, z);
                     BlockState state = level.getBlockState(cursor);
-                    PortalKind kind = PortalKind.ofBlock(state);
+                    FramedPortal kind = FramedPortal.of(state);
                     if (kind == null) continue;
                     Block portalBlock = portalBlockFor(kind);
                     if (portalBlock == null) continue;
@@ -158,21 +168,19 @@ public final class PlayerPortalSizeMatcher {
         return new BlockPos(cx, cy - halfH, cz - halfW);
     }
 
-    private static Block portalBlockFor(PortalKind kind) {
+    private static Block portalBlockFor(FramedPortal kind) {
         return switch (kind) {
             case NETHER -> Blocks.NETHER_PORTAL;
             case AETHER -> AetherCompat.portalBlock();
             case DEEPER_DARKER -> DeeperAndDarkerCompat.portalBlock();
-            default -> null;
         };
     }
 
-    private static Block frameBlockFor(PortalKind kind) {
+    private static Block frameBlockFor(FramedPortal kind) {
         return switch (kind) {
             case NETHER -> Blocks.OBSIDIAN;
             case AETHER -> Blocks.GLOWSTONE;
             case DEEPER_DARKER -> Blocks.REINFORCED_DEEPSLATE;
-            default -> null;
         };
     }
 }

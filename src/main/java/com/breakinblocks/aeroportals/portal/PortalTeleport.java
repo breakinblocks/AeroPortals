@@ -1,6 +1,9 @@
 package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.api.AeroPortalsApi;
+import com.breakinblocks.aeroportals.api.PortalDestination;
+import com.breakinblocks.aeroportals.api.SubLevelPreTransferEvent;
 import com.breakinblocks.aeroportals.api.SubLevelTransferEvent;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
@@ -74,13 +77,27 @@ public final class PortalTeleport {
 
     private PortalTeleport() {}
 
+    public static void dispatch(ServerLevel srcLevel, ServerSubLevel sub, PortalDestination destination) {
+        if (destination == null) return;
+        executeChainMove(srcLevel, sub, destination.level(), destination.subWorldPos(),
+                destination.validateLanding(), destination.label());
+    }
+
     public static void teleport(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
+        dispatch(srcLevel, sub, resolveNether(srcLevel, sub, srcRect));
+    }
+
+    public static void jumpOnboardNetherPortal(ServerLevel srcLevel, ServerSubLevel sub, PortalRect plotRect) {
+        dispatch(srcLevel, sub, resolveOnboardNetherPortal(srcLevel, sub, plotRect));
+    }
+
+    public static PortalDestination resolveNether(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
         MinecraftServer server = srcLevel.getServer();
         ResourceKey<Level> dstKey = (srcLevel.dimension() == Level.NETHER) ? Level.OVERWORLD : Level.NETHER;
         ServerLevel dstLevel = server.getLevel(dstKey);
         if (dstLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] destination dimension {} not loaded; aborting", dstKey.location());
-            return;
+            return null;
         }
 
         DimensionType srcDim = srcLevel.dimensionType();
@@ -101,7 +118,7 @@ public final class PortalTeleport {
         DestinationResolution resolved = resolveDestinationPortal(dstLevel, srcRect, searchCenter);
         if (resolved == null) {
             AeroPortals.LOGGER.error("[AeroPortals] could not resolve destination portal; aborting teleport");
-            return;
+            return null;
         }
         PortalRect dstRect = resolved.rect();
 
@@ -113,16 +130,16 @@ public final class PortalTeleport {
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "nether");
+        return PortalDestination.of(dstLevel, dstWorld, true, "nether");
     }
 
-    public static void jumpOnboardNetherPortal(ServerLevel srcLevel, ServerSubLevel sub, PortalRect plotRect) {
+    public static PortalDestination resolveOnboardNetherPortal(ServerLevel srcLevel, ServerSubLevel sub, PortalRect plotRect) {
         MinecraftServer server = srcLevel.getServer();
         ResourceKey<Level> dstKey = (srcLevel.dimension() == Level.NETHER) ? Level.OVERWORLD : Level.NETHER;
         ServerLevel dstLevel = server.getLevel(dstKey);
         if (dstLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] onboard jump: destination dimension {} not loaded; aborting", dstKey.location());
-            return;
+            return null;
         }
 
         double ratio = srcLevel.dimensionType().coordinateScale() / dstLevel.dimensionType().coordinateScale();
@@ -143,7 +160,7 @@ public final class PortalTeleport {
         DestinationResolution resolved = resolveDestinationPortal(dstLevel, plotRect, searchCenter);
         if (resolved == null) {
             AeroPortals.LOGGER.error("[AeroPortals] onboard jump: could not resolve destination portal; aborting");
-            return;
+            return null;
         }
         PortalRect dstRect = resolved.rect();
         Vec3 dstWorld = pushClearOfPortalPlane(sub, srcWorld, dstRect, dstRect.centerWorld().add(subOffsetFromPortal));
@@ -152,17 +169,17 @@ public final class PortalTeleport {
                 srcLevel.dimension().location(), srcWorld, srcPortalCenter,
                 dstKey.location(), dstRect.centerWorld(), dstWorld, ratio, resolved.generated());
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "onboard-portal");
+        return PortalDestination.of(dstLevel, dstWorld, true, "onboard-portal");
     }
 
-    public static void teleportEnd(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
+    public static PortalDestination resolveEnd(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
         MinecraftServer server = srcLevel.getServer();
         boolean goingToEnd = srcLevel.dimension() != Level.END;
         ResourceKey<Level> dstKey = goingToEnd ? Level.END : Level.OVERWORLD;
         ServerLevel dstLevel = server.getLevel(dstKey);
         if (dstLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] end teleport: destination dim {} not loaded; aborting", dstKey.location());
-            return;
+            return null;
         }
 
         Vec3 srcWorld = subWorldPos(sub.logicalPose());
@@ -184,22 +201,22 @@ public final class PortalTeleport {
         ensureChunksLoaded(dstLevel, BlockPos.containing(dstWorld));
         dstWorld = raiseLandingUntilClear(dstLevel, sub, dstWorld);
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "end");
+        return PortalDestination.of(dstLevel, dstWorld, true, "end");
     }
 
-    public static void teleportAether(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
+    public static PortalDestination resolveAether(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
         MinecraftServer server = srcLevel.getServer();
         ResourceKey<Level> destKey = AetherCompat.destinationDimension();
         ResourceKey<Level> returnKey = AetherCompat.returnDimension();
         if (destKey == null || returnKey == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] aether teleport: compat returned null dimension keys; aborting");
-            return;
+            return null;
         }
         ResourceKey<Level> dstKey = srcLevel.dimension().equals(destKey) ? returnKey : destKey;
         ServerLevel dstLevel = server.getLevel(dstKey);
         if (dstLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] aether destination dim {} not loaded; aborting", dstKey.location());
-            return;
+            return null;
         }
 
         DimensionType srcDim = srcLevel.dimensionType();
@@ -221,7 +238,7 @@ public final class PortalTeleport {
         DestinationResolution resolved = resolveAetherDestinationPortal(dstLevel, srcRect, searchCenter, aetherPortalBlock);
         if (resolved == null) {
             AeroPortals.LOGGER.error("[AeroPortals] aether teleport: could not resolve destination portal; aborting");
-            return;
+            return null;
         }
         PortalRect dstRect = resolved.rect();
         Vec3 dstPortalCenter = dstRect.centerWorld();
@@ -232,7 +249,7 @@ public final class PortalTeleport {
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, resolved.generated(), "aether");
+        return PortalDestination.of(dstLevel, dstWorld, resolved.generated(), "aether");
     }
 
     private static DestinationResolution resolveAetherDestinationPortal(
@@ -275,19 +292,19 @@ public final class PortalTeleport {
         return new DestinationResolution(generated, true);
     }
 
-    public static void teleportDeeperDarker(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
+    public static PortalDestination resolveDeeperDarker(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
         MinecraftServer server = srcLevel.getServer();
         ResourceKey<Level> destKey = DeeperAndDarkerCompat.destinationDimension();
         ResourceKey<Level> returnKey = DeeperAndDarkerCompat.returnDimension();
         if (destKey == null || returnKey == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker teleport: compat returned null dimension keys; aborting");
-            return;
+            return null;
         }
         ResourceKey<Level> dstKey = srcLevel.dimension().equals(destKey) ? returnKey : destKey;
         ServerLevel dstLevel = server.getLevel(dstKey);
         if (dstLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker destination dim {} not loaded; aborting", dstKey.location());
-            return;
+            return null;
         }
 
         DimensionType srcDim = srcLevel.dimensionType();
@@ -309,7 +326,7 @@ public final class PortalTeleport {
         DestinationResolution resolved = resolveDeeperDarkerDestinationPortal(dstLevel, srcRect, searchCenter, ddPortalBlock);
         if (resolved == null) {
             AeroPortals.LOGGER.error("[AeroPortals] deeperdarker teleport: could not resolve destination portal; aborting");
-            return;
+            return null;
         }
         PortalRect dstRect = resolved.rect();
         Vec3 dstPortalCenter = dstRect.centerWorld();
@@ -320,7 +337,7 @@ public final class PortalTeleport {
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, resolved.generated(), "deeperdarker");
+        return PortalDestination.of(dstLevel, dstWorld, resolved.generated(), "deeperdarker");
     }
 
     private static DestinationResolution resolveDeeperDarkerDestinationPortal(
@@ -363,18 +380,18 @@ public final class PortalTeleport {
         return new DestinationResolution(generated, true);
     }
 
-    public static void teleportArsNouveau(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
+    public static PortalDestination resolveArsNouveau(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
         MinecraftServer server = srcLevel.getServer();
         Optional<ArsNouveauCompat.Destination> destOpt = ArsNouveauCompat.readDestination(srcLevel, srcPortalBlock);
         if (destOpt.isEmpty()) {
             AeroPortals.LOGGER.debug("[AeroPortals] ars-nouveau portal at {} has no readable destination; skipping", srcPortalBlock);
-            return;
+            return null;
         }
         ArsNouveauCompat.Destination dest = destOpt.get();
         ServerLevel dstLevel = server.getLevel(dest.dim());
         if (dstLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] ars-nouveau dest dim {} not loaded; aborting", dest.dim().location());
-            return;
+            return null;
         }
 
         ensureChunksLoaded(dstLevel, dest.warpPos());
@@ -383,21 +400,21 @@ public final class PortalTeleport {
         AeroPortals.LOGGER.debug("[AeroPortals] ars-nouveau teleport: src dim={} portalBlock={} -> dst dim={} warpPos={} landing={}",
                 srcLevel.dimension().location(), srcPortalBlock, dest.dim().location(), dest.warpPos(), dstWorld);
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "ars_nouveau");
+        return PortalDestination.of(dstLevel, dstWorld, true, "ars_nouveau");
     }
 
-    public static void teleportDraconic(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
+    public static PortalDestination resolveDraconic(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
         MinecraftServer server = srcLevel.getServer();
         Optional<DraconicEvolutionCompat.Destination> destOpt = DraconicEvolutionCompat.readDestination(srcLevel, srcPortalBlock);
         if (destOpt.isEmpty()) {
             AeroPortals.LOGGER.debug("[AeroPortals] draconic portal at {} has no readable destination; skipping", srcPortalBlock);
-            return;
+            return null;
         }
         DraconicEvolutionCompat.Destination dest = destOpt.get();
         ServerLevel dstLevel = server.getLevel(dest.dim());
         if (dstLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] draconic dest dim {} not loaded; aborting", dest.dim().location());
-            return;
+            return null;
         }
 
         ensureChunksLoaded(dstLevel, dest.pos());
@@ -406,16 +423,16 @@ public final class PortalTeleport {
         AeroPortals.LOGGER.debug("[AeroPortals] draconic teleport: src dim={} portalBlock={} -> dst dim={} targetPos={} landing={}",
                 srcLevel.dimension().location(), srcPortalBlock, dest.dim().location(), dest.pos(), dstWorld);
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "draconic");
+        return PortalDestination.of(dstLevel, dstWorld, true, "draconic");
     }
 
-    public static void teleportEnderGateway(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect, BlockPos hitPos) {
+    public static PortalDestination resolveEnderGateway(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect, BlockPos hitPos) {
         MinecraftServer server = srcLevel.getServer();
         ResourceKey<Level> dstKey = (srcLevel.dimension() == Level.END) ? Level.OVERWORLD : Level.END;
         ServerLevel dstLevel = server.getLevel(dstKey);
         if (dstLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] ender gateway: destination dimension {} not loaded; aborting", dstKey.location());
-            return;
+            return null;
         }
 
         Optional<BlockPos> linked = CreateEnderGatewayCompat.readLinkedPos(srcLevel, hitPos);
@@ -434,7 +451,7 @@ public final class PortalTeleport {
         }
         if (linked.isEmpty()) {
             AeroPortals.LOGGER.debug("[AeroPortals] ender gateway at {} is not linked; skipping", hitPos);
-            return;
+            return null;
         }
 
         BlockPos linkedPos = linked.get();
@@ -442,12 +459,12 @@ public final class PortalTeleport {
         if (!CreateEnderGatewayCompat.isPortalBlock(dstLevel.getBlockState(linkedPos))) {
             AeroPortals.LOGGER.warn("[AeroPortals] ender gateway at {} links to {} in {} but no gateway exists there; skipping",
                     hitPos, linkedPos, dstKey.location());
-            return;
+            return null;
         }
         PortalRect dstRect = PortalGeom.measureFromBlock(dstLevel, linkedPos, CreateEnderGatewayCompat.portalBlock());
         if (dstRect == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] destination ender gateway at {} failed rect measurement; skipping", linkedPos);
-            return;
+            return null;
         }
 
         Vec3 srcWorld = subWorldPos(sub.logicalPose());
@@ -459,21 +476,21 @@ public final class PortalTeleport {
                 srcLevel.dimension().location(), srcWorld, srcRect.centerWorld(),
                 dstKey.location(), dstRect.centerWorld(), dstWorld);
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "ender-gateway");
+        return PortalDestination.of(dstLevel, dstWorld, true, "ender-gateway");
     }
 
-    public static void teleportCreateTeleporters(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
+    public static PortalDestination resolveCreateTeleporters(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
         MinecraftServer server = srcLevel.getServer();
         Optional<CreateTeleportersCompat.Destination> destOpt = CreateTeleportersCompat.readDestination(srcLevel, srcPortalBlock);
         if (destOpt.isEmpty()) {
             AeroPortals.LOGGER.debug("[AeroPortals] create-teleporters portal at {} has no readable destination; skipping", srcPortalBlock);
-            return;
+            return null;
         }
         CreateTeleportersCompat.Destination dest = destOpt.get();
         ServerLevel dstLevel = server.getLevel(dest.dim());
         if (dstLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] create-teleporters dest dim {} not loaded; aborting", dest.dim().location());
-            return;
+            return null;
         }
 
         ensureChunksLoaded(dstLevel, dest.pos());
@@ -492,7 +509,7 @@ public final class PortalTeleport {
         AeroPortals.LOGGER.debug("[AeroPortals] create-teleporters teleport: src dim={} portalBlock={} -> dst dim={} targetPos={} landing={}",
                 srcLevel.dimension().location(), srcPortalBlock, dest.dim().location(), dest.pos(), dstWorld);
 
-        executeChainMove(srcLevel, sub, dstLevel, dstWorld, true, "create_teleporters");
+        return PortalDestination.of(dstLevel, dstWorld, true, "create_teleporters");
     }
 
     private static final double PORTAL_EXIT_CLEARANCE = 1.5;
@@ -564,7 +581,6 @@ public final class PortalTeleport {
             String contextLabel) {
         MinecraftServer server = srcLevel.getServer();
         Vec3 srcWorld = subWorldPos(sub.logicalPose());
-        Vec3 translation = dstWorld.subtract(srcWorld);
 
         Collection<ServerSubLevel> chainRaw = SubLevelHelper.getLoadingDependencyChain(sub);
         long currentTick = server.getTickCount();
@@ -586,6 +602,19 @@ public final class PortalTeleport {
                     contextLabel, chain.size(),
                     chain.stream().map(s -> s.getUniqueId() + "@" + subWorldPos(s.logicalPose())).toList());
         }
+
+        SubLevelPreTransferEvent preEvent = new SubLevelPreTransferEvent(sub, srcLevel, dstLevel, chain, dstWorld, contextLabel);
+        if (NeoForge.EVENT_BUS.post(preEvent).isCanceled()) {
+            AeroPortals.LOGGER.debug("[AeroPortals] {} teleport cancelled by a listener{}",
+                    contextLabel, preEvent.cancelReason() == null ? "" : ": " + preEvent.cancelReason());
+            return;
+        }
+        if (!preEvent.destination().equals(dstWorld)) {
+            AeroPortals.LOGGER.debug("[AeroPortals] {} teleport destination changed by a listener: {} -> {}",
+                    contextLabel, dstWorld, preEvent.destination());
+            dstWorld = preEvent.destination();
+        }
+        Vec3 translation = dstWorld.subtract(srcWorld);
 
         List<PendingMove> pending = new ArrayList<>(chain.size());
         for (ServerSubLevel chainedSub : chain) {
@@ -1016,10 +1045,10 @@ public final class PortalTeleport {
 
     private static boolean isPortalRelated(ServerLevel level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
-        if (PortalKind.ofBlock(state) != null) return true;
+        if (AeroPortalsApi.isPortalBlock(state)) return true;
         if (!isPortalFrameMaterial(state)) return false;
         for (Direction d : Direction.values()) {
-            if (PortalKind.ofBlock(level.getBlockState(pos.relative(d))) != null) return true;
+            if (AeroPortalsApi.isPortalBlock(level.getBlockState(pos.relative(d)))) return true;
         }
         return false;
     }
