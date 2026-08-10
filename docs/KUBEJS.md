@@ -6,6 +6,14 @@ detects KubeJS on its own; if KubeJS is not installed nothing here loads and Aer
 Two things are added: an `AeroPortalsEvents` event group, and an `AeroPortals` binding you can call
 from any script.
 
+Ready-to-copy scripts covering everything below are in `docs/examples/kubejs/`:
+
+- [`startup_scripts/aeroportals_example.js`](examples/kubejs/startup_scripts/aeroportals_example.js) — fixers and portals
+- [`server_scripts/aeroportals_example.js`](examples/kubejs/server_scripts/aeroportals_example.js) — events, plus `/shipwarp` and `/shipinfo` commands
+
+Both are menus rather than starting points: keep the sections you want and delete the rest. The server
+one blocks all travel to the End if you copy it whole.
+
 ---
 
 ## Events
