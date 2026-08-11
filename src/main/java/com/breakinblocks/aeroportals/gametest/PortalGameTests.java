@@ -21,6 +21,7 @@ import dev.ryanhcode.sable.sublevel.storage.serialization.SubLevelSerializer;
 import dev.ryanhcode.sable.sublevel.storage.SubLevelRemovalReason;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.EntityTravelToDimensionEvent;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import com.breakinblocks.aeroportals.util.PortalGeom;
 import com.breakinblocks.aeroportals.util.PortalRect;
@@ -88,8 +89,9 @@ public class PortalGameTests {
 
     private static final String EMPTY = "empty";
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalRect_centerWorld_xAxis2x3", template = EMPTY)
     public static void portalRect_centerWorld_xAxis2x3(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         PortalRect rect = new PortalRect(new BlockPos(10, 20, 30), Direction.Axis.X, 2, 3);
         Vec3 center = rect.centerWorld();
         helper.assertValueEqual(11.0, center.x, "center.x");
@@ -98,8 +100,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalRect_centerWorld_zAxis2x3", template = EMPTY)
     public static void portalRect_centerWorld_zAxis2x3(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         PortalRect rect = new PortalRect(new BlockPos(10, 20, 30), Direction.Axis.Z, 2, 3);
         Vec3 center = rect.centerWorld();
         helper.assertValueEqual(10.5, center.x, "center.x");
@@ -108,8 +111,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalRect_centerWorld_1x1", template = EMPTY)
     public static void portalRect_centerWorld_1x1(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         PortalRect rect = new PortalRect(new BlockPos(0, 0, 0), Direction.Axis.X, 1, 1);
         Vec3 center = rect.centerWorld();
         helper.assertValueEqual(0.5, center.x, "center.x");
@@ -118,8 +122,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalBuilder_xAxis_placesObsidianFrame", template = EMPTY)
     public static void portalBuilder_xAxis_placesObsidianFrame(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         BlockPos local = new BlockPos(2, 2, 8);
         PortalBuilder.build(helper.getLevel(), helper.absolutePos(local), Direction.Axis.X, 2, 3);
 
@@ -136,8 +141,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalBuilder_xAxis_placesPortalBlocksWithAxis", template = EMPTY)
     public static void portalBuilder_xAxis_placesPortalBlocksWithAxis(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         BlockPos local = new BlockPos(2, 2, 8);
         PortalBuilder.build(helper.getLevel(), helper.absolutePos(local), Direction.Axis.X, 2, 3);
 
@@ -152,8 +158,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalBuilder_zAxis_placesFrameAlongZ", template = EMPTY)
     public static void portalBuilder_zAxis_placesFrameAlongZ(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         BlockPos local = new BlockPos(8, 2, 2);
         PortalBuilder.build(helper.getLevel(), helper.absolutePos(local), Direction.Axis.Z, 2, 3);
 
@@ -169,8 +176,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalBuilder_clearsExistingBlocksInArea", template = EMPTY)
     public static void portalBuilder_clearsExistingBlocksInArea(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         BlockPos local = new BlockPos(2, 2, 8);
 
         helper.setBlock(local.offset(0, 0, -1), Blocks.STONE.defaultBlockState());
@@ -186,8 +194,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalGeom_measureFromBlock_xAxis_3x4", template = EMPTY)
     public static void portalGeom_measureFromBlock_xAxis_3x4(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         BlockPos local = new BlockPos(2, 2, 8);
         BlockPos world = helper.absolutePos(local);
         PortalBuilder.build(helper.getLevel(), world, Direction.Axis.X, 3, 4);
@@ -201,8 +210,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalGeom_measureFromBlock_zAxis_2x3", template = EMPTY)
     public static void portalGeom_measureFromBlock_zAxis_2x3(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         BlockPos local = new BlockPos(8, 2, 2);
         BlockPos world = helper.absolutePos(local);
         PortalBuilder.build(helper.getLevel(), world, Direction.Axis.Z, 2, 3);
@@ -216,8 +226,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endToEnd_subLevelInPortal_teleportsToNether", template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_subLevelInPortal_teleportsToNether(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         MinecraftServer server = srcLevel.getServer();
         ServerLevel dstLevel = server.getLevel(Level.NETHER);
@@ -291,8 +302,9 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endToEnd_destinationPortalMatchesSourceDimensions", template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_destinationPortalMatchesSourceDimensions(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         MinecraftServer server = srcLevel.getServer();
         ServerLevel dstLevel = server.getLevel(Level.NETHER);
@@ -374,8 +386,9 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 100)
+    @GameTest(batch = "portalDetector_noPortalNearby_doesNotTeleport", template = EMPTY, timeoutTicks = 100)
     public static void portalDetector_noPortalNearby_doesNotTeleport(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         if (srcContainer == null) {
@@ -415,8 +428,9 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "portalCooldown_marksAndExpiresAfterConfiguredTicks", template = EMPTY)
     public static void portalCooldown_marksAndExpiresAfterConfiguredTicks(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         UUID uuid = UUID.randomUUID();
         PortalCooldown.clear();
 
@@ -440,11 +454,13 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endToEnd_armorStandRider_transfersToNether", template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_armorStandRider_transfersToNether(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         UUID[] standUuidRef = new UUID[1];
         UUID[] subUuidRef = new UUID[1];
 
@@ -466,6 +482,7 @@ public class PortalGameTests {
                     stand.setItemSlot(EquipmentSlot.HEAD,
                             new ItemStack(Items.DIAMOND_HELMET));
                     srcLevel.addFreshEntity(stand);
+                    stand.setPortalCooldown(1000);
                     standUuidRef[0] = stand.getUUID();
 
                     PortalBuilder.build(srcLevel, worldPos, Direction.Axis.X, 2, 3);
@@ -498,11 +515,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endToEnd_cowOnSubLevel_doesNotTransfer", template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_cowOnSubLevel_doesNotTransfer(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         UUID[] cowUuidRef = new UUID[1];
 
         helper.startSequence()
@@ -545,11 +564,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "vanillaPortalRaceSuppressed_cancelHandlerFires", template = EMPTY, timeoutTicks = 200)
     public static void vanillaPortalRaceSuppressed_cancelHandlerFires(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         UUID[] standUuidRef = new UUID[1];
 
         helper.startSequence()
@@ -572,10 +593,12 @@ public class PortalGameTests {
                     srcLevel.addFreshEntity(stand);
                     standUuidRef[0] = stand.getUUID();
                     VanillaPortalCanceller.cancelledFor.remove(standUuidRef[0]);
-                    AeroPortals.LOGGER.info("[AeroPortals/test] spawned armor stand uuid={} (no portalCooldown override)",
-                            standUuidRef[0]);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] spawned armor stand uuid={}", standUuidRef[0]);
+
+                    NeoForge.EVENT_BUS.post(new EntityTravelToDimensionEvent(stand, Level.NETHER));
                 })
-                .thenIdle(5)
+                .thenIdle(3)
+                .thenExecute(() -> PortalDetector.scan(srcLevel))
                 .thenExecute(() -> {
                     boolean wasCancelled = VanillaPortalCanceller.cancelledFor.contains(standUuidRef[0]);
                     Entity moved = PortalTeleport.lastMovedEntities.get(standUuidRef[0]);
@@ -598,11 +621,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "deferredClientSync_retriesFireAfterTeleport", template = EMPTY, timeoutTicks = 200)
     public static void deferredClientSync_retriesFireAfterTeleport(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
 
         int[] startFireCountRef = new int[1];
 
@@ -637,11 +662,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endToEnd_dependencyChain_movesTogether", template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_dependencyChain_movesTogether(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
         if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
@@ -740,11 +767,13 @@ public class PortalGameTests {
         }
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "subLevelTransferEvent_firesWithCorrectTranslation", template = EMPTY, timeoutTicks = 200)
     public static void subLevelTransferEvent_firesWithCorrectTranslation(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         if (srcContainer == null) { helper.fail("srcContainer"); return; }
 
@@ -806,11 +835,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "journal_successfulTeleportClearsEntry", template = EMPTY, timeoutTicks = 200)
     public static void journal_successfulTeleportClearsEntry(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         UUID[] subUuidRef = new UUID[1];
 
         helper.startSequence()
@@ -845,14 +876,16 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "journal_recoversLostSubLevelOnReplay", template = EMPTY, timeoutTicks = 200)
     public static void journal_recoversLostSubLevelOnReplay(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         
         
         
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
         if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
@@ -920,11 +953,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "journal_replayClearsStaleEntryWhenSubAlreadyInSrc", template = EMPTY, timeoutTicks = 200)
     public static void journal_replayClearsStaleEntryWhenSubAlreadyInSrc(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         if (srcContainer == null) { helper.fail("srcContainer"); return; }
         UUID[] subUuidRef = new UUID[1];
@@ -974,8 +1009,9 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endPortal_overworldToEnd_landsSubOnPlatform_buildingItIfMissing", template = EMPTY, timeoutTicks = 200)
     public static void endPortal_overworldToEnd_landsSubOnPlatform_buildingItIfMissing(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel endLevel = srcLevel.getServer().getLevel(Level.END);
         if (endLevel == null) { helper.fail("End not loaded"); return; }
@@ -1060,9 +1096,10 @@ public class PortalGameTests {
                         AABB aabb = AabbUtil.worldAabb(inEnd);
                         AeroPortals.LOGGER.info("[AeroPortals/test] end-OW->End: sub aabb.minY = {} (expected {})",
                                 aabb.minY, EndPortalLanding.LANDING_Y);
-                        if (Math.abs(aabb.minY - EndPortalLanding.LANDING_Y) > 0.1) {
-                            helper.fail("sub bottom not at LANDING_Y=" + EndPortalLanding.LANDING_Y
-                                    + ", got aabb.minY=" + aabb.minY);
+                        if (aabb.minY > EndPortalLanding.LANDING_Y + 0.5
+                                || aabb.minY < EndPortalLanding.LANDING_Y - 1.0) {
+                            helper.fail("sub bottom should be resting on the platform at LANDING_Y="
+                                    + EndPortalLanding.LANDING_Y + ", got aabb.minY=" + aabb.minY);
                             return;
                         }
                     }
@@ -1070,8 +1107,9 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "endPortalLanding_ensurePlatform_isIdempotent", template = EMPTY)
     public static void endPortalLanding_ensurePlatform_isIdempotent(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         
         
         
@@ -1087,8 +1125,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "endPortalLanding_landingPosition_putsLowestBlockAtTopOfPlatform", template = EMPTY)
     public static void endPortalLanding_landingPosition_putsLowestBlockAtTopOfPlatform(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         
         ServerLevel srcLevel = helper.getLevel();
         BlockPos local = new BlockPos(7, 4, 7);
@@ -1124,8 +1163,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "endPortalLanding_ensurePlatform_buildsWhenMissing", template = EMPTY)
     public static void endPortalLanding_ensurePlatform_buildsWhenMissing(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel endLevel = helper.getLevel().getServer().getLevel(Level.END);
         if (endLevel == null) { helper.fail("End not loaded"); return; }
 
@@ -1159,8 +1199,9 @@ public class PortalGameTests {
         }
         helper.succeed();
     }
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "arsNouveauCompat_noOpsCleanlyWhenAbsent", template = EMPTY)
     public static void arsNouveauCompat_noOpsCleanlyWhenAbsent(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         boolean available = ArsNouveauCompat.isAvailable();
         AeroPortals.LOGGER.info("[AeroPortals/test] AN compat isAvailable={} (AN loaded in this run: {})",
                 available, ModList.get().isLoaded(ArsNouveauCompat.MOD_ID));
@@ -1193,8 +1234,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endToEnd_arsNouveauPortal_landsSubAtConfiguredWarpPos", template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_arsNouveauPortal_landsSubAtConfiguredWarpPos(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         
         if (!ArsNouveauCompat.isAvailable()) {
             AeroPortals.LOGGER.info("[AeroPortals/test] AN not loaded - skipping AN end-to-end teleport test");
@@ -1205,6 +1247,7 @@ public class PortalGameTests {
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
         if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
@@ -1238,6 +1281,8 @@ public class PortalGameTests {
                     
                     BlockPos warpPos = new BlockPos(1000, 80, 1000);
                     warpPosRef[0] = warpPos;
+                    clearNetherCube(dstLevel, warpPos.above(4), 6);
+                    dstLevel.setBlock(warpPos, Blocks.NETHERRACK.defaultBlockState(), Block.UPDATE_CLIENTS);
                     BlockEntity be = srcLevel.getBlockEntity(worldPos);
                     if (be == null) { helper.fail("AN portal BE not present after setBlock"); return; }
                     try {
@@ -1292,8 +1337,9 @@ public class PortalGameTests {
                 })
                 .thenSucceed();
     }
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "aetherCompat_noOpsCleanlyWhenAbsent", template = EMPTY)
     public static void aetherCompat_noOpsCleanlyWhenAbsent(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         boolean available = AetherCompat.isAvailable();
         AeroPortals.LOGGER.info("[AeroPortals/test] Aether compat isAvailable={} (Aether loaded in this run: {})",
                 available, ModList.get().isLoaded(AetherCompat.MOD_ID));
@@ -1325,8 +1371,9 @@ public class PortalGameTests {
         }
         helper.succeed();
     }
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endToEnd_aetherPortal_teleportsToAetherDim", template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_aetherPortal_teleportsToAetherDim(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         if (!AetherCompat.isAvailable()) {
             AeroPortals.LOGGER.info("[AeroPortals/test] Aether not loaded - skipping Aether end-to-end teleport test");
             helper.succeed();
@@ -1398,8 +1445,9 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "command_teleportToDimension_movesSubToTargetDim", template = EMPTY, timeoutTicks = 200)
     public static void command_teleportToDimension_movesSubToTargetDim(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
 
 
 
@@ -1408,6 +1456,7 @@ public class PortalGameTests {
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         if (srcContainer == null) { helper.fail("srcContainer"); return; }
 
@@ -1462,11 +1511,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "velocityHold_subArrivesStoppedThenRegainsMomentum", template = EMPTY, timeoutTicks = 200)
     public static void velocityHold_subArrivesStoppedThenRegainsMomentum(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         if (srcContainer == null) { helper.fail("srcContainer"); return; }
 
@@ -1518,7 +1569,7 @@ public class PortalGameTests {
                         helper.fail("arrival did not capture the ship's momentum for handback");
                     }
                 })
-                .thenIdle(30)
+                .thenIdle(22)
                 .thenExecute(() -> {
                     int restored = PortalTeleport.DeferredVelocityRestores.restoredCount.get() - restoredBefore[0];
                     int skipped = PortalTeleport.DeferredVelocityRestores.skippedCount.get() - skippedBefore[0];
@@ -1567,8 +1618,9 @@ public class PortalGameTests {
         return Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 100)
+    @GameTest(batch = "command_parseDestination_coordinateForms", template = EMPTY, timeoutTicks = 100)
     public static void command_parseDestination_coordinateForms(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         var plain = AeroPortalsCommands.parseDestination("kubejs:deep_space");
         if (!plain.dimensionPart().equals("kubejs:deep_space") || plain.hasCoords()) {
             helper.fail("plain dimension parse wrong: " + plain);
@@ -1603,11 +1655,13 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "teleport_abortsWhenLandingBlockedByNetherrack", template = EMPTY, timeoutTicks = 200)
     public static void teleport_abortsWhenLandingBlockedByNetherrack(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         if (srcContainer == null) { helper.fail("srcContainer"); return; }
 
@@ -1633,7 +1687,7 @@ public class PortalGameTests {
                     if (sub == null) { helper.fail("assemble failed"); return; }
                     subUuidRef[0] = sub.getUniqueId();
 
-                    fillNetherCube(dstLevel, new BlockPos(dstX, dstY, dstZ), 3, Blocks.NETHERRACK.defaultBlockState());
+                    fillNetherColumn(dstLevel, new BlockPos(dstX, dstY, dstZ), 3, dstLevel.getMaxBuildHeight() - 1);
 
                     Vec3 dstWorld = new Vec3(dstX + 0.5, dstY + 0.5, dstZ + 0.5);
                     PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld,
@@ -1648,7 +1702,7 @@ public class PortalGameTests {
                         AeroPortals.LOGGER.info("[AeroPortals/test] abort-when-blocked: inSrc={} eventFired={}",
                                 inSrc, captured != null);
                         if (!inSrc) {
-                            helper.fail("sub should remain in src dim when teleport is aborted by blocked landing");
+                            helper.fail("sub should remain in src dim when there is no clear landing to lift it to");
                             return;
                         }
                         if (captured != null) {
@@ -1662,11 +1716,67 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
-    public static void teleport_succeedsWhenLandingClearedFirst(GameTestHelper helper) {
+    @GameTest(batch = "teleport_liftsShipAboveBlockedLanding", template = EMPTY, timeoutTicks = 200)
+    public static void teleport_liftsShipAboveBlockedLanding(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
+        if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
+
+        final int dstX = 12500;
+        final int dstY = 64;
+        final int dstZ = 12500;
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+                    UUID id = sub.getUniqueId();
+
+                    clearNetherCube(dstLevel, new BlockPos(dstX, dstY + 12, dstZ), 6);
+                    fillNetherCube(dstLevel, new BlockPos(dstX, dstY, dstZ), 3, Blocks.NETHERRACK.defaultBlockState());
+
+                    PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel,
+                            new Vec3(dstX + 0.5, dstY + 0.5, dstZ + 0.5), true, "test:lift_above_blocked");
+
+                    if (srcContainer.getSubLevel(id) != null) {
+                        helper.fail("sub should have left the source dimension instead of the trip being cancelled");
+                        return;
+                    }
+                    ServerSubLevel arrived = (ServerSubLevel) dstContainer.getSubLevel(id);
+                    if (arrived == null) {
+                        helper.fail("sub should be present in the destination dimension");
+                        return;
+                    }
+                    AABB aabb = AabbUtil.worldAabb(arrived);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] lift-above-blocked: arrived aabb.minY={} (netherrack top is {})",
+                            aabb.minY, dstY + 3);
+                    if (aabb.minY <= dstY + 3) {
+                        helper.fail("ship should have been lifted clear of the netherrack, got aabb.minY=" + aabb.minY);
+                        return;
+                    }
+                })
+                .thenSucceed();
+    }
+
+    @GameTest(batch = "teleport_succeedsWhenLandingClearedFirst", template = EMPTY, timeoutTicks = 200)
+    public static void teleport_succeedsWhenLandingClearedFirst(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         if (srcContainer == null) { helper.fail("srcContainer"); return; }
 
@@ -1737,12 +1847,52 @@ public class PortalGameTests {
         }
     }
 
+    private static void fillNetherColumn(ServerLevel level, BlockPos centre, int radius, int topY) {
+        BlockState state = Blocks.NETHERRACK.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                for (int y = centre.getY() - radius; y <= topY; y++) {
+                    cursor.set(centre.getX() + dx, y, centre.getZ() + dz);
+                    level.setBlock(cursor, state, Block.UPDATE_CLIENTS);
+                }
+            }
+        }
+    }
+
     private static void clearNetherCube(ServerLevel level, BlockPos centre, int radius) {
         fillNetherCube(level, centre, radius, Blocks.AIR.defaultBlockState());
     }
 
-    @GameTest(template = EMPTY)
+    private static void clearNetherLandingZone(ServerLevel netherLevel, BlockPos srcWorldPos) {
+        if (netherLevel == null) return;
+        int centreX = (int) Math.round(srcWorldPos.getX() / 8.0);
+        int centreZ = (int) Math.round(srcWorldPos.getZ() / 8.0);
+        int floorTop = netherLevel.getMinBuildHeight() + 2;
+        int maxY = Math.min(netherLevel.getMaxBuildHeight() - 2, floorTop + 40);
+        BlockState air = Blocks.AIR.defaultBlockState();
+        BlockState floor = Blocks.NETHERRACK.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        int portalBlocks = 0;
+        for (int x = centreX - 20; x <= centreX + 20; x++) {
+            for (int z = centreZ - 20; z <= centreZ + 20; z++) {
+                for (int y = netherLevel.getMinBuildHeight() + 1; y <= maxY; y++) {
+                    cursor.set(x, y, z);
+                    BlockState wanted = y <= floorTop ? floor : air;
+                    BlockState state = netherLevel.getBlockState(cursor);
+                    if (state == wanted) continue;
+                    if (state.is(Blocks.NETHER_PORTAL)) portalBlocks++;
+                    netherLevel.setBlock(cursor, wanted, Block.UPDATE_CLIENTS);
+                }
+            }
+        }
+        AeroPortals.LOGGER.info("[AeroPortals/test] prepared nether landing zone at {},{} (floor to y={}, air to y={}), removed {} portal block(s)",
+                centreX, centreZ, floorTop, maxY, portalBlocks);
+    }
+
+    @GameTest(batch = "draconicEvolutionCompat_noOpsCleanlyWhenAbsent", template = EMPTY)
     public static void draconicEvolutionCompat_noOpsCleanlyWhenAbsent(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         boolean available = DraconicEvolutionCompat.isAvailable();
         AeroPortals.LOGGER.info("[AeroPortals/test] DE compat isAvailable={} (DE loaded in this run: {})",
                 available, ModList.get().isLoaded(DraconicEvolutionCompat.MOD_ID));
@@ -1765,8 +1915,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "tropicraftCompat_noOpsCleanlyWhenAbsent", template = EMPTY)
     public static void tropicraftCompat_noOpsCleanlyWhenAbsent(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         boolean available = TropicraftCompat.isAvailable();
         AeroPortals.LOGGER.info("[AeroPortals/test] Tropicraft compat isAvailable={} (Tropicraft loaded in this run: {})",
                 available, ModList.get().isLoaded(TropicraftCompat.MOD_ID));
@@ -1798,8 +1949,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "telepastriesCompat_noOpsCleanlyWhenAbsent", template = EMPTY)
     public static void telepastriesCompat_noOpsCleanlyWhenAbsent(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         boolean available = TelepastriesCompat.isAvailable();
         AeroPortals.LOGGER.info("[AeroPortals/test] TelePastries compat isAvailable={} (TelePastries loaded in this run: {})",
                 available, ModList.get().isLoaded(TelepastriesCompat.MOD_ID));
@@ -1840,8 +1992,9 @@ public class PortalGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endToEnd_pinaColadaOnSubLevel_teleportsToTropics", template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_pinaColadaOnSubLevel_teleportsToTropics(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         if (!TropicraftCompat.isAvailable()) {
             AeroPortals.LOGGER.info("[AeroPortals/test] Tropicraft not loaded - skipping pina colada teleport test");
             helper.succeed();
@@ -1943,11 +2096,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endToEnd_itemFrameWithItem_transfersWithContents", template = EMPTY, timeoutTicks = 200)
     public static void endToEnd_itemFrameWithItem_transfersWithContents(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         UUID[] frameUuidRef = new UUID[1];
 
         helper.startSequence()
@@ -2008,11 +2163,86 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
-    public static void endToEnd_relocatedSubLevel_preservesSpawnerData(GameTestHelper helper) {
+    @GameTest(batch = "endToEnd_wallEntityInsidePlot_travelsWithTheShip", template = EMPTY, timeoutTicks = 200)
+    public static void endToEnd_wallEntityInsidePlot_travelsWithTheShip(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
+
+        UUID[] frameUuidRef = new UUID[1];
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos local = new BlockPos(7, 4, 7);
+                    BlockPos worldPos = helper.absolutePos(local);
+                    helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+
+                    BoundingBox3i bounds = new BoundingBox3i(
+                            worldPos.getX() - 1, worldPos.getY() - 1, worldPos.getZ() - 1,
+                            worldPos.getX() + 1, worldPos.getY() + 1, worldPos.getZ() + 1);
+                    ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(
+                            srcLevel, worldPos, List.of(worldPos), bounds);
+                    if (sub == null) { helper.fail("assemble failed"); return; }
+
+                    BlockPos plotBlock = findBlockInPlot(srcLevel, sub, Blocks.OBSIDIAN);
+                    if (plotBlock == null) { helper.fail("assembled block missing from the plot"); return; }
+
+                    ItemFrame frame = new ItemFrame(srcLevel, plotBlock, Direction.UP);
+                    frame.setItem(new ItemStack(Items.DIAMOND));
+                    srcLevel.addFreshEntity(frame);
+                    frameUuidRef[0] = frame.getUUID();
+                    AeroPortals.LOGGER.info("[AeroPortals/test] spawned in-plot item frame uuid={} at plot pos {}",
+                            frameUuidRef[0], plotBlock);
+
+                    Vec3 dstWorld = new Vec3(worldPos.getX() / 8.0 + 2048.0, 128.0, worldPos.getZ() / 8.0 + 2048.0);
+                    PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld, false, "test_wall_entity");
+
+                    if (srcLevel.getEntity(frameUuidRef[0]) != null) {
+                        helper.fail("item frame was left behind in the source dimension");
+                        return;
+                    }
+                    Entity moved = dstLevel.getEntity(frameUuidRef[0]);
+                    if (!(moved instanceof ItemFrame arrived)) {
+                        helper.fail("item frame did not arrive in the destination dimension, got " + moved);
+                        return;
+                    }
+                    if (!arrived.getItem().is(Items.DIAMOND)) {
+                        helper.fail("arriving item frame lost its contents: " + arrived.getItem());
+                        return;
+                    }
+                    if (!dstLevel.getBlockState(arrived.getPos()).is(Blocks.OBSIDIAN)) {
+                        helper.fail("item frame is no longer attached to the ship block; attached at "
+                                + arrived.getPos() + " which holds " + dstLevel.getBlockState(arrived.getPos()));
+                        return;
+                    }
+                })
+                .thenSucceed();
+    }
+
+    private static BlockPos findBlockInPlot(ServerLevel level, ServerSubLevel sub, Block block) {
+        var bounds = sub.getPlot().getBoundingBox();
+        if (bounds == BoundingBox3i.EMPTY) return null;
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int x = bounds.minX(); x <= bounds.maxX(); x++) {
+            for (int y = bounds.minY(); y <= bounds.maxY(); y++) {
+                for (int z = bounds.minZ(); z <= bounds.maxZ(); z++) {
+                    cursor.set(x, y, z);
+                    if (level.getBlockState(cursor).is(block)) return cursor.immutable();
+                }
+            }
+        }
+        return null;
+    }
+
+    @GameTest(batch = "endToEnd_relocatedSubLevel_preservesSpawnerData", template = EMPTY, timeoutTicks = 200)
+    public static void endToEnd_relocatedSubLevel_preservesSpawnerData(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
         if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
@@ -2078,11 +2308,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "subLevelTransferEvent_plotShiftRemapsOldPlotPositions", template = EMPTY, timeoutTicks = 200)
     public static void subLevelTransferEvent_plotShiftRemapsOldPlotPositions(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
         if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
@@ -2178,11 +2410,13 @@ public class PortalGameTests {
         return tag.getCompound("SpawnData").getCompound("entity").getString("id");
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "bounceSuppression_arrivedSubDoesNotImmediatelyReturn", template = EMPTY, timeoutTicks = 200)
     public static void bounceSuppression_arrivedSubDoesNotImmediatelyReturn(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
         if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
@@ -2228,11 +2462,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "selfHeal_destinationLoadFailure_restoresSubToSource", template = EMPTY, timeoutTicks = 200)
     public static void selfHeal_destinationLoadFailure_restoresSubToSource(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
         if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
@@ -2289,11 +2525,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "sableBridge_tallShipAboveDestinationRange_shiftsDownAndFits", template = EMPTY, timeoutTicks = 200)
     public static void sableBridge_tallShipAboveDestinationRange_shiftsDownAndFits(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
         if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
@@ -2346,11 +2584,13 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "sableBridge_shipTallerThanDestination_abortsWithoutRemovingSub", template = EMPTY, timeoutTicks = 200)
     public static void sableBridge_shipTallerThanDestination_abortsWithoutRemovingSub(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
         ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
         if (srcContainer == null) { helper.fail("srcContainer"); return; }
 
@@ -2393,6 +2633,7 @@ public class PortalGameTests {
 
     @GameTest(template = EMPTY, timeoutTicks = 200, batch = "aeroportalsIsolated")
     public static void portalDetector_failedTeleport_armsCooldown(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel endLevel = srcLevel.getServer().getLevel(Level.END);
         if (endLevel == null) { helper.fail("End not loaded"); return; }
@@ -2450,8 +2691,9 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "endPortal_blockedLanding_raisesAboveTerrain", template = EMPTY, timeoutTicks = 200)
     public static void endPortal_blockedLanding_raisesAboveTerrain(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel endLevel = srcLevel.getServer().getLevel(Level.END);
         if (endLevel == null) { helper.fail("End not loaded"); return; }

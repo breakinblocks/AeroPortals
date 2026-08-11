@@ -6,6 +6,7 @@ import com.breakinblocks.aeroportals.api.AeroPortalsApi;
 import com.breakinblocks.aeroportals.api.PortalDestination;
 import com.breakinblocks.aeroportals.api.nbt.BlockEntityNbtFixer;
 import com.breakinblocks.aeroportals.api.nbt.NbtFixContext;
+import com.breakinblocks.aeroportals.config.TravelMethods;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -32,7 +33,8 @@ public final class ScriptRegistry {
 
     record ScriptPortal(String id, Set<ResourceLocation> blocks, PortalResolver resolver) {
         boolean matches(BlockState state) {
-            return this.blocks.contains(BuiltInRegistries.BLOCK.getKey(state.getBlock()));
+            return TravelMethods.isEnabled(this.id)
+                    && this.blocks.contains(BuiltInRegistries.BLOCK.getKey(state.getBlock()));
         }
     }
 

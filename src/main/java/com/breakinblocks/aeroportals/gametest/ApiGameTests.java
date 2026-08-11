@@ -7,6 +7,8 @@ import com.breakinblocks.aeroportals.api.SubLevelPreTransferEvent;
 import com.breakinblocks.aeroportals.api.TransferCarrier;
 import com.breakinblocks.aeroportals.api.nbt.NbtFixContext;
 import com.breakinblocks.aeroportals.api.nbt.NbtFixers;
+import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
+import com.breakinblocks.aeroportals.config.TravelMethods;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import dev.ryanhcode.sable.api.SubLevelAssemblyHelper;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
@@ -48,8 +50,9 @@ public class ApiGameTests {
         return tag;
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "api_nbtFixer_shiftsIntArrayLongAndCompoundPositions", template = EMPTY)
     public static void api_nbtFixer_shiftsIntArrayLongAndCompoundPositions(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         CompoundTag tag = beTag("aeroportals:fixer_probe_a");
         tag.putIntArray("Array", new int[]{1, 2, 3});
         tag.putLong("Packed", new BlockPos(1, 2, 3).asLong());
@@ -79,8 +82,9 @@ public class ApiGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "api_nbtFixer_leavesPositionsAloneWhenPlotDidNotMove", template = EMPTY)
     public static void api_nbtFixer_leavesPositionsAloneWhenPlotDidNotMove(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         CompoundTag tag = beTag("aeroportals:fixer_probe_b");
         tag.putIntArray("Array", new int[]{1, 2, 3});
 
@@ -94,8 +98,9 @@ public class ApiGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "api_dimensionFixer_rewritesOnlyTheSourceDimension", template = EMPTY)
     public static void api_dimensionFixer_rewritesOnlyTheSourceDimension(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         CompoundTag tag = beTag("aeroportals:fixer_probe_c");
         tag.putString("Mine", "minecraft:overworld");
         tag.putString("Someone else's", "minecraft:the_end");
@@ -113,8 +118,9 @@ public class ApiGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "api_nestedFixer_descendsIntoChildCompounds", template = EMPTY)
     public static void api_nestedFixer_descendsIntoChildCompounds(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         CompoundTag tag = beTag("aeroportals:fixer_probe_d");
         CompoundTag components = new CompoundTag();
         CompoundTag data = new CompoundTag();
@@ -133,8 +139,9 @@ public class ApiGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "api_registeredFixerRunsForItsBlockEntityIdOnly", template = EMPTY)
     public static void api_registeredFixerRunsForItsBlockEntityIdOnly(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         AeroPortalsApi.registerNbtFixer("aeroportals:registry_probe", NbtFixers.blockPos("Pos"));
 
         CompoundTag matching = beTag("aeroportals:registry_probe");
@@ -157,8 +164,9 @@ public class ApiGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "api_builtinPortalTypesAreRegisteredAndMatchTheirBlocks", template = EMPTY)
     public static void api_builtinPortalTypesAreRegisteredAndMatchTheirBlocks(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         if (AeroPortalsApi.portalTypes().isEmpty()) {
             helper.fail("no portal types registered; built-in registration did not run");
             return;
@@ -175,6 +183,45 @@ public class ApiGameTests {
         }
         if (AeroPortalsApi.isPortalBlock(Blocks.STONE.defaultBlockState())) {
             helper.fail("plain stone should not be a portal block");
+            return;
+        }
+        helper.succeed();
+    }
+
+    @GameTest(batch = "api_disabledTravelMethodsAreSkipped", template = EMPTY)
+    public static void api_disabledTravelMethodsAreSkipped(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
+        List<? extends String> previous = AeroPortalsConfig.DISABLED_TRAVEL_METHODS.get();
+        try {
+            AeroPortalsConfig.DISABLED_TRAVEL_METHODS.set(List.of("nether", "AeroPortals:End"));
+            if (AeroPortalsApi.findPortalType(Blocks.NETHER_PORTAL.defaultBlockState()) != null) {
+                helper.fail("nether portal type was still consulted after being disabled in the config");
+                return;
+            }
+            if (AeroPortalsApi.findPortalType(Blocks.END_PORTAL.defaultBlockState()) != null) {
+                helper.fail("end portal type was still consulted after being disabled by its full id");
+                return;
+            }
+
+            AeroPortalsConfig.DISABLED_TRAVEL_METHODS.set(List.of("nether"));
+            if (AeroPortalsApi.findPortalType(Blocks.END_PORTAL.defaultBlockState()) == null) {
+                helper.fail("end portal type stayed disabled after being removed from the config list");
+                return;
+            }
+            if (TravelMethods.isEnabled(TravelMethods.NETHER)) {
+                helper.fail("nether travel method reported enabled while listed as disabled");
+                return;
+            }
+            if (!TravelMethods.isEnabled(TravelMethods.PINA_COLADA)) {
+                helper.fail("pina colada travel method reported disabled while not listed");
+                return;
+            }
+        } finally {
+            AeroPortalsConfig.DISABLED_TRAVEL_METHODS.set(previous);
+        }
+
+        if (AeroPortalsApi.findPortalType(Blocks.NETHER_PORTAL.defaultBlockState()) == null) {
+            helper.fail("nether portal type did not come back after the config list was restored");
             return;
         }
         helper.succeed();
@@ -205,8 +252,9 @@ public class ApiGameTests {
         }
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "api_addonPortalTypeIsDiscoveredOnlyWhileEnabled", template = EMPTY)
     public static void api_addonPortalTypeIsDiscoveredOnlyWhileEnabled(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         AeroPortalsApi.registerPortal(new ProbePortalType());
 
         ProbePortalType.armed.set(false);
@@ -273,8 +321,9 @@ public class ApiGameTests {
         }
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "api_preTransferEventCanVetoATeleport", template = EMPTY, timeoutTicks = 200)
     public static void api_preTransferEventCanVetoATeleport(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) {
@@ -337,8 +386,9 @@ public class ApiGameTests {
         return true;
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "kubejs_startupScriptRegistersWorkingNbtFixers", template = EMPTY)
     public static void kubejs_startupScriptRegistersWorkingNbtFixers(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         if (kubeJsAbsent(helper)) return;
 
         CompoundTag tag = beTag("aeroportals:kubejs_probe");
@@ -367,8 +417,9 @@ public class ApiGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY)
+    @GameTest(batch = "kubejs_startupScriptRegisteredPortalIsDiscovered", template = EMPTY)
     public static void kubejs_startupScriptRegisteredPortalIsDiscovered(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         if (kubeJsAbsent(helper)) return;
 
         AeroPortalType found = AeroPortalsApi.findPortalType(Blocks.JUKEBOX.defaultBlockState());
@@ -383,8 +434,9 @@ public class ApiGameTests {
         helper.succeed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "kubejs_serverScriptCanVetoATransfer", template = EMPTY, timeoutTicks = 200)
     public static void kubejs_serverScriptCanVetoATransfer(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         if (kubeJsAbsent(helper)) return;
 
         ServerLevel srcLevel = helper.getLevel();
@@ -431,8 +483,9 @@ public class ApiGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(template = EMPTY, timeoutTicks = 200)
+    @GameTest(batch = "api_transferCarrierCapturesAndReplaysAcrossTheMove", template = EMPTY, timeoutTicks = 200)
     public static void api_transferCarrierCapturesAndReplaysAcrossTheMove(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
         ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
         if (dstLevel == null) {

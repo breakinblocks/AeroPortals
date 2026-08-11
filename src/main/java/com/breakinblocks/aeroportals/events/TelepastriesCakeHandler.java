@@ -2,6 +2,7 @@ package com.breakinblocks.aeroportals.events;
 
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.compat.TelepastriesCompat;
+import com.breakinblocks.aeroportals.config.TravelMethods;
 import com.breakinblocks.aeroportals.portal.EndPortalLanding;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.util.AabbUtil;
@@ -29,6 +30,7 @@ public final class TelepastriesCakeHandler {
     @SubscribeEvent
     public static void onRightClickCake(PlayerInteractEvent.RightClickBlock event) {
         if (!AeroPortals.sableLoaded) return;
+        if (!TravelMethods.isEnabled(TravelMethods.TELEPASTRIES)) return;
         if (!TelepastriesCompat.isAvailable()) return;
         if (event.getLevel().isClientSide()) return;
         if (!(event.getEntity() instanceof ServerPlayer player)) return;

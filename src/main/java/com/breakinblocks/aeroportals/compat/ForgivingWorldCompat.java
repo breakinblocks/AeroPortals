@@ -1,6 +1,7 @@
 package com.breakinblocks.aeroportals.compat;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.config.TravelMethods;
 import com.breakinblocks.aeroportals.portal.PortalCooldown;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.util.AabbUtil;
@@ -127,6 +128,7 @@ public final class ForgivingWorldCompat {
     }
 
     public static void scan(ServerLevel level) {
+        if (!TravelMethods.isEnabled(TravelMethods.DIMENSION_STACK)) return;
         if (!isAvailable()) return;
         ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
         if (container == null) return;

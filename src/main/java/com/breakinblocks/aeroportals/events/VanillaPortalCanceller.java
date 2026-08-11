@@ -34,6 +34,7 @@ public final class VanillaPortalCanceller {
         if (!AeroPortals.sableLoaded) return;
         Entity entity = event.getEntity();
         if (!(entity.level() instanceof ServerLevel srcLevel)) return;
+        AabbUtil.ensureBoundsCurrent(srcLevel);
 
         if (entity instanceof ServerPlayer player) {
             SubLevel tracking = aboardSubLevel(srcLevel, player);

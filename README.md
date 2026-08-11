@@ -2,7 +2,7 @@
 
 Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/create-aeronautics) airship through a portal and the whole ship goes with you. Players, passengers, decorations, and item frames travel together. AeroPortals is the bridge between Create's airships ([Sable](https://www.curseforge.com/minecraft/mc-mods/sable) physics) and Minecraft's portal system.
 
-> Status: public beta. The core flow works end-to-end and is covered by 39 automated tests, but expect rough edges. See [Known limitations](#known-limitations).
+> Status: public beta. The core flow works end-to-end and is covered by 63 automated tests, but expect rough edges. See [Known limitations](#known-limitations).
 
 ## Warning
 
@@ -16,7 +16,7 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 - **Onboard portal jump drives** (off by default; enable `onboard_portal_jumps` in the server config). Build a nether portal into your ship and light it mid-flight: after a short countdown the whole ship jumps to the other dimension, portal and all, like a spaceship performing a jump. A matching portal is linked or built at the destination beside where you arrive. Break or extinguish the onboard portal during the countdown to abort, and re-light it whenever you want to jump again.
 
-- **Non-destructive landings** If your destination is blocked by terrain or builds, AeroPortals will tell you in chat which block is in the way and cancel the teleport. Your ship stays where it is, and the destination side is never modified. Clear the space and try again. Server admins who would rather have big ships carve their own landing zone can enable `clear_destination_blocks` in the server config: blocking blocks at the destination are then destroyed (without drops) instead of cancelling the trip. Portal blocks, portal frames, and unbreakable blocks are always left intact.
+- **Non-destructive landings** If your destination is blocked by terrain or builds, AeroPortals lifts your ship straight up until it finds clear air and puts it down there, so arriving beside a portal built into a hillside or on the ground does not cost you the trip. Ships travelling together are lifted by the same amount and keep their formation. If there is no clear space above either, AeroPortals tells you in chat which block is in the way and cancels the teleport: your ship stays where it is, and the destination side is never modified. Server admins who would rather have big ships carve their own landing zone can enable `clear_destination_blocks` in the server config: blocking blocks at the destination are then destroyed (without drops) instead of cancelling the trip. Portal blocks, portal frames, and unbreakable blocks are always left intact.
 
 - **Aether portals** (when [The Aether](https://www.curseforge.com/minecraft/mc-mods/aether) is installed). Same idea as nether portals but with glowstone frames and the Aether dimension.
 
@@ -85,6 +85,10 @@ Without coordinates, the ship lands at a sensible spot in the destination: the o
 
 Add three coordinates after the dimension to pick the landing spot yourself, for example `/aeroportals teleport kubejs:deep_space -1000 ~ -1000`. Coordinates are absolute positions in the destination dimension; the command does not apply nether-style coordinate scaling to them. Each coordinate also accepts `~` or `~offset`, relative to the spot the command would have picked on its own, so `~ ~ ~` is the same as leaving them off. The Y coordinate is where the bottom of your airship (or your feet, without a ship) ends up. Note that `execute positioned` does not affect this command; use the explicit coordinates instead.
 
+### `/aeroportals methods` (op only)
+
+Lists every way of travelling AeroPortals knows about, with the id you would put in the config to switch it off and whether it is currently on. See [Turning travel methods off](#turning-travel-methods-off).
+
 ## For server admins
 
 ### Requirements
@@ -121,6 +125,34 @@ If an optional mod isn't installed, that integration is simply inactive: no erro
 | `teleport.dest_portal_search_radius` | `128` | How far AeroPortals looks for an existing matching portal at the destination before deciding to build a new one. |
 | `teleport.generate_matching_portal` | `true` | If `false`, the teleport aborts when no destination portal is found instead of building one. |
 | `teleport.clear_velocity_on_arrival` | `false` | If `true`, ships arrive from a teleport standing still. By default they keep their momentum. |
+| `travel_methods.disabled` | `[]` | Ways of travelling AeroPortals should leave alone. See [Turning travel methods off](#turning-travel-methods-off). |
+
+### Turning travel methods off
+
+Every way of travelling has an id, and listing an id in `travel_methods.disabled` stops AeroPortals acting on it. The portal, drink, or cake keeps working for players on foot; it just stops carrying airships. Disabling vanilla portals but keeping the Aether looks like this:
+
+```toml
+[travel_methods]
+	disabled = ["nether", "end"]
+```
+
+| Id | What it covers |
+|---|---|
+| `nether` | Nether portals, and onboard portal jump drives |
+| `end` | End portals |
+| `aether` | Aether portals |
+| `ars_nouveau` | Ars Nouveau warp portals |
+| `draconic` | Draconic Evolution portals |
+| `deeper_darker` | Deeper and Darker portals |
+| `create_teleporters` | Create: Teleporters portals |
+| `ender_gateway` | Create: Ender Gateway portals |
+| `pina_colada` | Drinking a pina colada |
+| `telepastries` | TelePastries cakes |
+| `ae2_spatial` | AE2 spatial storage capture and deploy |
+| `dimension_stack` | Flying through the floor or ceiling of a stacked dimension |
+| `kubejs` | Every portal added by a KubeJS script |
+
+Portals added by other mods or by a single KubeJS script can be listed by their own id too. Run `/aeroportals methods` in game to see every id on your server and whether it is on.
 
 ### Crash safety
 
@@ -128,8 +160,8 @@ AeroPortals writes the ship snapshot to disk before moving it. If the server cra
 
 ## Known limitations
 
-- **Ropes and joints don't survive teleport.** Ships connected by Sable rope/docking links travel together and stay in formation, but the physical connection itself breaks. Re-tie the rope or re-dock at the destination.
-- **Other modded portal types aren't auto-supported.** Twilight Forest, Mystcraft, etc. aren't recognized. Vanilla nether/end, plus Aether, Ars Nouveau, Tropicraft, Draconic Evolution, Deeper and Darker, Create: Teleporters, Create: Ender Gateway, AE2 spatial storage, and dimension stacking (Stackable Planar Dimensions / Forgiving World) are the supported travel methods today.
+- **Ropes and docking links have to be re-made by hand.** Ships connected by Sable rope or docking links travel together and stay in formation, and the connectors, springs, winches and swivel plates no longer lose track of what they were attached to, so nothing has to be rebuilt from scratch. The live physical link itself is still not re-tied for you: re-attach the rope or re-dock once you arrive.
+- **Portals from mods we haven't covered aren't recognized on their own.** Twilight Forest, Mystcraft and friends do nothing by default. The supported travel methods today are vanilla nether and end portals, Aether, Ars Nouveau, Draconic Evolution, Deeper and Darker, Create: Teleporters, Create: Ender Gateway, TelePastries cakes, Tropicraft pina coladas, AE2 spatial storage, and dimension stacking (Stackable Planar Dimensions / Forgiving World). Anything else needs teaching: a pack can add a portal with a KubeJS script and a mod can add one through the API, both without waiting on us. See `docs/KUBEJS.md` and `docs/API.md`, or open an issue and we will look at adding it.
 - **Speed slightly drops per teleport.** Each portal trip costs about 10% of your velocity (Sable's reload setting). Tune `sub_level_velocity_retained_on_load` in Sable's config if you want full preservation.
 
 ## Want support for another portal or dimension?

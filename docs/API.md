@@ -83,7 +83,9 @@ Use `PortalDestination.of(level, pos, false, label)` to skip landing validation 
 the space is clear.
 
 `priority()` decides which type wins when two match the same block state (higher first, default 0).
-`isEnabled()` is checked on every lookup, so you can gate a type behind your own config.
+`isEnabled()` is checked on every lookup, so you can gate a type behind your own config. Server
+owners can also switch your type off by adding its id to `travel_methods.disabled` in
+`aeroportals-server.toml`; that check happens alongside `isEnabled()` and needs nothing from you.
 
 Related helpers:
 

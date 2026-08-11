@@ -82,6 +82,10 @@ Set no destination and the ship stays put, which is how you make a portal that o
 condition. Script-registered portals are checked before the built-in ones, so you can override how
 AeroPortals treats a vanilla portal block if you want to.
 
+The id you pick is also what a server owner puts in `travel_methods.disabled` in
+`aeroportals-server.toml` to switch that portal off, and `kubejs` in that list switches off every
+script-registered portal at once.
+
 ### `AeroPortalsEvents.preTransfer` (server scripts)
 
 Fires before anything moves. Cancel it to stop the trip, or move the destination.

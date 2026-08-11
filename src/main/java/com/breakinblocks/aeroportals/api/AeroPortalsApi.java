@@ -3,6 +3,7 @@ package com.breakinblocks.aeroportals.api;
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.api.nbt.BlockEntityNbtFixer;
 import com.breakinblocks.aeroportals.api.nbt.NbtFixContext;
+import com.breakinblocks.aeroportals.config.TravelMethods;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -62,6 +63,7 @@ public final class AeroPortalsApi {
     public static AeroPortalType findPortalType(BlockState state) {
         for (AeroPortalType type : PORTAL_TYPES) {
             if (!type.isEnabled()) continue;
+            if (!TravelMethods.isEnabled(type.id())) continue;
             try {
                 if (type.matches(state)) return type;
             } catch (RuntimeException e) {

@@ -34,6 +34,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.TicketType;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.RelativeMovement;
 import net.minecraft.world.entity.player.Player;
@@ -54,6 +55,7 @@ import org.joml.Vector3dc;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -582,6 +584,7 @@ public final class PortalTeleport {
         MinecraftServer server = srcLevel.getServer();
         Vec3 srcWorld = subWorldPos(sub.logicalPose());
 
+        AabbUtil.ensureBoundsCurrent(sub);
         Collection<ServerSubLevel> chainRaw = SubLevelHelper.getLoadingDependencyChain(sub);
         long currentTick = server.getTickCount();
         List<ServerSubLevel> chain = new ArrayList<>(chainRaw.size());
@@ -624,26 +627,50 @@ public final class PortalTeleport {
             pending.add(new PendingMove(chainedSub, chainedSrcPos, chainedDstPos));
         }
 
+        for (PendingMove pm : pending) {
+            holdDestinationChunks(dstLevel, pm.dstPos);
+        }
+
         if (validateLanding) {
             boolean clearBlocks = AeroPortalsConfig.CLEAR_DESTINATION_BLOCKS.get();
-            for (PendingMove pm : pending) {
-                if (clearBlocks) {
+            if (clearBlocks) {
+                for (PendingMove pm : pending) {
                     int cleared = clearLandingSpace(dstLevel, pm.sub, pm.srcPos, pm.dstPos);
                     if (cleared > 0) {
                         AeroPortals.LOGGER.debug("[AeroPortals] {} teleport: cleared {} destination block(s) for sub {}",
                                 contextLabel, cleared, pm.sub.getUniqueId());
                     }
-                    continue;
                 }
-                Optional<BlockPos> blocker = validateLandingSpace(dstLevel, pm.sub, pm.srcPos, pm.dstPos);
-                if (blocker.isPresent()) {
-                    BlockPos blockerPos = blocker.get();
-                    BlockState blockerState = dstLevel.getBlockState(blockerPos);
-                    AeroPortals.LOGGER.warn("[AeroPortals] {} teleport aborted: landing for sub {} blocked at {} by {} (dstAabb origin {})",
-                            contextLabel, pm.sub.getUniqueId(), blockerPos,
-                            blockerState.getBlock(), pm.dstPos);
-                    messageAbort(srcLevel, dstLevel, chain, blockerPos, blockerState);
-                    return;
+            } else {
+                double lift = 0.0;
+                for (PendingMove pm : pending) {
+                    Vec3 raised = raiseLandingUntilClear(dstLevel, pm.sub, pm.dstPos);
+                    lift = Math.max(lift, raised.y - pm.dstPos.y);
+                }
+                if (lift > 0.0) {
+                    AeroPortals.LOGGER.debug("[AeroPortals] {} teleport: lifting the arrival by {} block(s) to clear the ground at the destination",
+                            contextLabel, lift);
+                    translation = translation.add(0.0, lift, 0.0);
+                    dstWorld = dstWorld.add(0.0, lift, 0.0);
+                    List<PendingMove> lifted = new ArrayList<>(pending.size());
+                    for (PendingMove pm : pending) {
+                        lifted.add(new PendingMove(pm.sub, pm.srcPos, pm.dstPos.add(0.0, lift, 0.0)));
+                    }
+                    pending = lifted;
+                    messageLift(srcLevel, chain, lift);
+                }
+
+                for (PendingMove pm : pending) {
+                    Optional<BlockPos> blocker = validateLandingSpace(dstLevel, pm.sub, pm.srcPos, pm.dstPos);
+                    if (blocker.isPresent()) {
+                        BlockPos blockerPos = blocker.get();
+                        BlockState blockerState = dstLevel.getBlockState(blockerPos);
+                        AeroPortals.LOGGER.warn("[AeroPortals] {} teleport aborted: landing for sub {} blocked at {} by {} (dstAabb origin {})",
+                                contextLabel, pm.sub.getUniqueId(), blockerPos,
+                                blockerState.getBlock(), pm.dstPos);
+                        messageAbort(srcLevel, dstLevel, chain, blockerPos, blockerState);
+                        return;
+                    }
                 }
             }
         }
@@ -899,6 +926,17 @@ public final class PortalTeleport {
         }
     }
 
+    private static final int DESTINATION_HOLD_CHUNK_RADIUS = 2;
+    private static final TicketType<ChunkPos> ARRIVAL_TICKET =
+            TicketType.create("aeroportals_arrival", Comparator.comparingLong(ChunkPos::toLong), 60);
+
+    public static void holdDestinationChunks(ServerLevel dstLevel, Vec3 dstPos) {
+        ChunkPos chunkPos = new ChunkPos(BlockPos.containing(dstPos));
+        dstLevel.getChunkSource().addRegionTicket(ARRIVAL_TICKET, chunkPos, DESTINATION_HOLD_CHUNK_RADIUS, chunkPos);
+        AeroPortals.LOGGER.debug("[AeroPortals] holding destination chunks around {} in {} while the ship arrives",
+                chunkPos, dstLevel.dimension().location());
+    }
+
     private record DestinationResolution(PortalRect rect, boolean generated) {}
 
     private static DestinationResolution resolveDestinationPortal(ServerLevel dstLevel, PortalRect srcRect, BlockPos searchCenter) {
@@ -1086,6 +1124,16 @@ public final class PortalTeleport {
             }
         }
         return result;
+    }
+
+    private static void messageLift(ServerLevel srcLevel, Collection<ServerSubLevel> chain, double lift) {
+        Component msg = Component.literal(
+                "AeroPortals: the ground was in the way on the other side, so you arrive "
+                        + Math.round(lift) + " block(s) higher.")
+                .withStyle(ChatFormatting.GRAY);
+        for (ServerPlayer p : ridersOfChain(srcLevel, chain)) {
+            p.sendSystemMessage(msg);
+        }
     }
 
     private static void messageAbort(ServerLevel srcLevel, ServerLevel dstLevel, Collection<ServerSubLevel> chain,

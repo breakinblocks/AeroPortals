@@ -216,7 +216,12 @@ tasks.register('copyGameTestKubeScripts', Copy) {
 	include '**/*.js'
 }
 
+tasks.register('cleanGameTestWorld', Delete) {
+	delete "run-gametest/world"
+}
+
 tasks.named('runGameTestServer').configure {
+	dependsOn 'cleanGameTestWorld'
 	dependsOn 'copyGameTestStructures'
 	dependsOn 'copyGameTestKubeScripts'
 }

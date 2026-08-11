@@ -2,6 +2,8 @@ package com.breakinblocks.aeroportals.config;
 
 import net.neoforged.neoforge.common.ModConfigSpec;
 
+import java.util.List;
+
 public final class AeroPortalsConfig {
     public static final ModConfigSpec SPEC;
 
@@ -16,6 +18,7 @@ public final class AeroPortalsConfig {
     public static final ModConfigSpec.BooleanValue CLEAR_DESTINATION_BLOCKS;
     public static final ModConfigSpec.BooleanValue ONBOARD_PORTAL_JUMPS;
     public static final ModConfigSpec.IntValue ONBOARD_JUMP_DELAY_TICKS;
+    public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_TRAVEL_METHODS;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -57,6 +60,17 @@ public final class AeroPortalsConfig {
         ONBOARD_JUMP_DELAY_TICKS = builder
                 .comment("Ticks between an onboard portal being lit and the ship jumping. Gives riders time to abort by breaking the portal.")
                 .defineInRange("onboard_jump_delay_ticks", 100, 0, 24000);
+        builder.pop();
+
+        builder.push("travel_methods");
+        DISABLED_TRAVEL_METHODS = builder
+                .comment("Ways of travelling that AeroPortals will ignore. Anything listed here is left alone: the portal, drink, or cake still works for players on foot, it just no longer carries airships.",
+                        "Built-in ids: nether, end, aether, ars_nouveau, draconic, deeper_darker, create_teleporters, ender_gateway, pina_colada, telepastries, ae2_spatial, dimension_stack, kubejs",
+                        "Ids added by other mods or by KubeJS scripts can be listed too. Run /aeroportals methods in game to see every id and whether it is on.",
+                        "Example: [\"nether\", \"end\"] stops airships travelling through vanilla portals while leaving every modded portal working.",
+                        "Listing 'nether' also switches off onboard portal jump drives.")
+                .defineListAllowEmpty("disabled", List.<String>of(), () -> "",
+                        entry -> entry instanceof String s && !s.isBlank());
         builder.pop();
 
         SPEC = builder.build();

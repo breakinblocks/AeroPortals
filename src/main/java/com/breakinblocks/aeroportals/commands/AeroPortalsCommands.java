@@ -1,9 +1,16 @@
 package com.breakinblocks.aeroportals.commands;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.api.AeroPortalType;
+import com.breakinblocks.aeroportals.api.AeroPortalsApi;
+import com.breakinblocks.aeroportals.compat.Ae2SpatialCompat;
 import com.breakinblocks.aeroportals.compat.AetherCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
+import com.breakinblocks.aeroportals.compat.ForgivingWorldCompat;
+import com.breakinblocks.aeroportals.compat.SpdStackCompat;
+import com.breakinblocks.aeroportals.compat.TelepastriesCompat;
 import com.breakinblocks.aeroportals.compat.TropicraftCompat;
+import com.breakinblocks.aeroportals.config.TravelMethods;
 import com.breakinblocks.aeroportals.portal.EndPortalLanding;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.util.AabbUtil;
@@ -14,6 +21,7 @@ import com.mojang.brigadier.suggestion.SuggestionProvider;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.core.registries.Registries;
@@ -57,7 +65,9 @@ public final class AeroPortalsCommands {
                                 .then(Commands.argument(ARG_DIMENSION, StringArgumentType.greedyString())
                                         .suggests(SUGGEST_DIMENSIONS)
                                         .executes(ctx -> runTeleport(ctx.getSource(),
-                                                StringArgumentType.getString(ctx, ARG_DIMENSION))))));
+                                                StringArgumentType.getString(ctx, ARG_DIMENSION)))))
+                        .then(Commands.literal("methods")
+                                .executes(ctx -> listMethods(ctx.getSource()))));
     }
 
     private static final SuggestionProvider<CommandSourceStack> SUGGEST_DIMENSIONS = (ctx, builder) -> {
@@ -128,6 +138,39 @@ public final class AeroPortalsCommands {
         AeroPortals.LOGGER.debug("[AeroPortals] OP command: teleported player {} to {} at {}",
                 player.getGameProfile().getName(), dstKeyFinal.location(), dstPos);
         return 1;
+    }
+
+    private static int listMethods(CommandSourceStack source) {
+        source.sendSuccess(() -> Component.literal("AeroPortals travel methods (server config: travel_methods.disabled)")
+                .withStyle(ChatFormatting.AQUA), false);
+
+        for (AeroPortalType type : AeroPortalsApi.portalTypes()) {
+            sendMethod(source, displayId(type.id()), TravelMethods.isEnabled(type.id()), type.isEnabled());
+        }
+        sendMethod(source, "pina_colada", TravelMethods.isEnabled(TravelMethods.PINA_COLADA),
+                TropicraftCompat.isAvailable());
+        sendMethod(source, "telepastries", TravelMethods.isEnabled(TravelMethods.TELEPASTRIES),
+                TelepastriesCompat.isAvailable());
+        sendMethod(source, "ae2_spatial", TravelMethods.isEnabled(TravelMethods.AE2_SPATIAL),
+                Ae2SpatialCompat.isAvailable());
+        sendMethod(source, "dimension_stack", TravelMethods.isEnabled(TravelMethods.DIMENSION_STACK),
+                SpdStackCompat.isAvailable() || ForgivingWorldCompat.isAvailable());
+
+        source.sendSuccess(() -> Component.literal("inactive means the mod or script that provides it is not present")
+                .withStyle(ChatFormatting.DARK_GRAY), false);
+        return 1;
+    }
+
+    private static void sendMethod(CommandSourceStack source, String id, boolean allowedByConfig, boolean available) {
+        String state = !allowedByConfig ? "disabled in config" : available ? "active" : "inactive";
+        ChatFormatting colour = !allowedByConfig
+                ? ChatFormatting.RED
+                : available ? ChatFormatting.GREEN : ChatFormatting.GRAY;
+        source.sendSuccess(() -> Component.literal("  " + id + ": " + state).withStyle(colour), false);
+    }
+
+    private static String displayId(ResourceLocation id) {
+        return id.getNamespace().equals(AeroPortals.MOD_ID) ? id.getPath() : id.toString();
     }
 
     private static ResourceKey<Level> resolveDimensionKey(String arg) {

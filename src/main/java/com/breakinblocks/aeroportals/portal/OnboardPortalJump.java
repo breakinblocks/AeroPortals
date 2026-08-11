@@ -2,6 +2,7 @@ package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
+import com.breakinblocks.aeroportals.config.TravelMethods;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import com.breakinblocks.aeroportals.util.PortalGeom;
 import com.breakinblocks.aeroportals.util.PortalRect;
@@ -42,6 +43,7 @@ public final class OnboardPortalJump {
 
     public static void scan(ServerLevel level) {
         if (!AeroPortalsConfig.ONBOARD_PORTAL_JUMPS.get()) return;
+        if (!TravelMethods.isEnabled(TravelMethods.NETHER)) return;
         ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
         if (container == null) return;
         List<ServerSubLevel> subs = container.getAllSubLevels();

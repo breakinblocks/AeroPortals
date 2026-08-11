@@ -1,6 +1,7 @@
 package com.breakinblocks.aeroportals.compat;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.config.TravelMethods;
 import com.breakinblocks.aeroportals.portal.EntityRiderBinding;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.portal.RiderBinding;
@@ -158,6 +159,8 @@ public final class Ae2SpatialCompat {
     }
 
     private static void handleTransition(MinecraftServer server, Object plot, Object transition) throws ReflectiveOperationException {
+        if (!TravelMethods.isEnabled(TravelMethods.AE2_SPATIAL)) return;
+
         int plotId = (Integer) plotGetId.invoke(plot);
         ResourceLocation worldId = (ResourceLocation) transitionGetWorldId.invoke(transition);
         BlockPos min = (BlockPos) transitionGetMin.invoke(transition);

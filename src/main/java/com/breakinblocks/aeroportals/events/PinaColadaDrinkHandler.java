@@ -2,6 +2,7 @@ package com.breakinblocks.aeroportals.events;
 
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.compat.TropicraftCompat;
+import com.breakinblocks.aeroportals.config.TravelMethods;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import dev.ryanhcode.sable.Sable;
@@ -28,6 +29,7 @@ public final class PinaColadaDrinkHandler {
     @SubscribeEvent
     public static void onFinishUseItem(LivingEntityUseItemEvent.Finish event) {
         if (!AeroPortals.sableLoaded) return;
+        if (!TravelMethods.isEnabled(TravelMethods.PINA_COLADA)) return;
         if (!TropicraftCompat.isAvailable()) return;
 
         LivingEntity entity = event.getEntity();
