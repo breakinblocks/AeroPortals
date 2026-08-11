@@ -23,6 +23,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
@@ -242,7 +243,7 @@ public class ApiGameTests {
         }
 
         @Override
-        public boolean matches(net.minecraft.world.level.block.state.BlockState state) {
+        public boolean matches(BlockState state) {
             return state.is(Blocks.BOOKSHELF);
         }
 

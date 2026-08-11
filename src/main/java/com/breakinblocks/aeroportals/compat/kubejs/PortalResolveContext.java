@@ -3,6 +3,7 @@ package com.breakinblocks.aeroportals.compat.kubejs;
 import com.breakinblocks.aeroportals.api.PortalDestination;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -64,7 +65,7 @@ public class PortalResolveContext {
         if (id == null) {
             throw new IllegalArgumentException("'" + dimension + "' is not a valid dimension id");
         }
-        ServerLevel level = this.srcLevel.getServer().getLevel(ResourceKey.create(net.minecraft.core.registries.Registries.DIMENSION, id));
+        ServerLevel level = this.srcLevel.getServer().getLevel(ResourceKey.create(Registries.DIMENSION, id));
         if (level == null) {
             throw new IllegalArgumentException("dimension '" + dimension + "' is not loaded");
         }

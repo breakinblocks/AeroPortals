@@ -134,9 +134,9 @@ dependencies {
 	compileOnly("com.simibubi.create:create-${minecraft_version}:${create_version}:slim") { transitive = false }
 	compileOnly "net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1"
 
-	compileOnly("dev.ryanhcode.sable:sable-neoforge-1.21.1:1.2.2") { transitive = false }
-	localRuntime("dev.ryanhcode.sable:sable-neoforge-1.21.1:1.2.2") { transitive = false }
-	compileOnly("dev.ryanhcode.sable-companion:sable-companion-common-1.21.1:1.6.0") { transitive = false }
+	compileOnly("dev.ryanhcode.sable:sable-neoforge-1.21.1:${sable_version}") { transitive = false }
+	localRuntime("dev.ryanhcode.sable:sable-neoforge-1.21.1:${sable_version}") { transitive = false }
+	compileOnly("dev.ryanhcode.sable-companion:sable-companion-common-1.21.1:${sable_companion_version}") { transitive = false }
 
 	compileOnly("dev.latvian.mods:kubejs-neoforge:${kubejs_version}") { transitive = false }
 	compileOnly("dev.latvian.mods:rhino:${rhino_version}") { transitive = false }
@@ -168,6 +168,8 @@ dependencies {
 	localRuntime("maven.modrinth:create-teleporters:gMBCo1Df") { transitive = false }
 
 	localRuntime("maven.modrinth:create-ender-gateway:VfxSTFHt") { transitive = false }
+
+	localRuntime("maven.modrinth:create-aeronautics:1.3.0+mc1.21.1") { transitive = false }
 
 	localRuntime("com.simibubi.create:create-${minecraft_version}:${create_version}") { transitive = false }
 	localRuntime("net.createmod.ponder:ponder-neoforge:1.0.82+mc1.21.1") { transitive = false }

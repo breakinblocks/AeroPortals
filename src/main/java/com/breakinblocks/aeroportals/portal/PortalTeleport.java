@@ -11,6 +11,7 @@ import com.breakinblocks.aeroportals.compat.CreateEnderGatewayCompat;
 import com.breakinblocks.aeroportals.compat.CreateTeleportersCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
+import com.breakinblocks.aeroportals.compat.SimulatedRopeCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import com.breakinblocks.aeroportals.util.PortalBuilder;
@@ -585,7 +586,8 @@ public final class PortalTeleport {
         Vec3 srcWorld = subWorldPos(sub.logicalPose());
 
         AabbUtil.ensureBoundsCurrent(sub);
-        Collection<ServerSubLevel> chainRaw = SubLevelHelper.getLoadingDependencyChain(sub);
+        Collection<ServerSubLevel> chainRaw = SimulatedRopeCompat.withRopePartners(
+                srcLevel, SubLevelHelper.getLoadingDependencyChain(sub));
         long currentTick = server.getTickCount();
         List<ServerSubLevel> chain = new ArrayList<>(chainRaw.size());
         for (ServerSubLevel s : chainRaw) {

@@ -1,6 +1,7 @@
 package com.breakinblocks.aeroportals.gametest;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.compat.SimulatedRopeCompat;
 import com.breakinblocks.aeroportals.api.SubLevelTransferEvent;
 import com.breakinblocks.aeroportals.commands.AeroPortalsCommands;
 import com.breakinblocks.aeroportals.events.VanillaPortalCanceller;
@@ -1550,7 +1551,7 @@ public class PortalGameTests {
 
                     Vec3 dstWorld = new Vec3(helper.absolutePos(new BlockPos(7, 4, 7)).getX() / 8.0 + 0.5,
                             64.5, helper.absolutePos(new BlockPos(7, 4, 7)).getZ() / 8.0 + 0.5);
-                    clearNetherCube(dstLevel, BlockPos.containing(dstWorld), 3);
+                    clearNetherShaft(dstLevel, BlockPos.containing(dstWorld), 3, 34);
                     PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel, dstWorld,
                             true, "test:velocity_hold");
 
@@ -1716,6 +1717,135 @@ public class PortalGameTests {
                 .thenSucceed();
     }
 
+    @GameTest(batch = "endToEnd_ropeBetweenTwoShips_survivesTheTrip", template = EMPTY, timeoutTicks = 200)
+    public static void endToEnd_ropeBetweenTwoShips_survivesTheTrip(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
+        if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
+
+        if (!SimulatedRopeCompat.isAvailable()) {
+            AeroPortals.LOGGER.info("[AeroPortals/test] Simulated rope API not present - skipping rope handover test");
+            helper.succeed();
+            return;
+        }
+        Block connectorBlock = BuiltInRegistries.BLOCK.get(ResourceLocation.parse("simulated:rope_connector"));
+        if (connectorBlock == Blocks.AIR) {
+            AeroPortals.LOGGER.info("[AeroPortals/test] simulated:rope_connector not registered - skipping rope handover test");
+            helper.succeed();
+            return;
+        }
+
+        UUID[] subA = new UUID[1];
+        UUID[] subB = new UUID[1];
+        UUID[] strandId = new UUID[1];
+
+        helper.startSequence()
+                .thenExecute(() -> {
+                    BlockPos localA = new BlockPos(4, 4, 7);
+                    BlockPos localB = new BlockPos(10, 4, 7);
+                    BlockPos worldA = helper.absolutePos(localA);
+                    BlockPos worldB = helper.absolutePos(localB);
+                    helper.setBlock(localA, connectorBlock.defaultBlockState());
+                    helper.setBlock(localB, connectorBlock.defaultBlockState());
+
+                    ServerSubLevel a = SubLevelAssemblyHelper.assembleBlocks(srcLevel, worldA, List.of(worldA),
+                            new BoundingBox3i(worldA.getX() - 1, worldA.getY() - 1, worldA.getZ() - 1,
+                                    worldA.getX() + 1, worldA.getY() + 1, worldA.getZ() + 1));
+                    ServerSubLevel b = SubLevelAssemblyHelper.assembleBlocks(srcLevel, worldB, List.of(worldB),
+                            new BoundingBox3i(worldB.getX() - 1, worldB.getY() - 1, worldB.getZ() - 1,
+                                    worldB.getX() + 1, worldB.getY() + 1, worldB.getZ() + 1));
+                    if (a == null || b == null) { helper.fail("assemble failed"); return; }
+                    subA[0] = a.getUniqueId();
+                    subB[0] = b.getUniqueId();
+                })
+                .thenIdle(3)
+                .thenExecute(() -> {
+                    ServerSubLevel a = (ServerSubLevel) srcContainer.getSubLevel(subA[0]);
+                    ServerSubLevel b = (ServerSubLevel) srcContainer.getSubLevel(subB[0]);
+                    if (a == null || b == null) { helper.fail("a ship went missing before the rope was tied"); return; }
+
+                    BlockPos plotA = findBlockInPlot(srcLevel, a, connectorBlock);
+                    BlockPos plotB = findBlockInPlot(srcLevel, b, connectorBlock);
+                    if (plotA == null || plotB == null) { helper.fail("rope connector missing from a plot"); return; }
+
+                    if (!connectRope(srcLevel, plotA, plotB)) {
+                        helper.fail("could not tie a rope between the two ships");
+                        return;
+                    }
+                    Object strand = SimulatedRopeCompat.ownedStrand(srcLevel.getBlockEntity(plotA));
+                    if (strand == null) { helper.fail("no rope strand after tying it"); return; }
+                    strandId[0] = SimulatedRopeCompat.strandId(strand);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] rope {} tied between {} and {}", strandId[0], plotA, plotB);
+                })
+                .thenExecute(() -> {
+                    ServerSubLevel a = (ServerSubLevel) srcContainer.getSubLevel(subA[0]);
+                    if (a == null) { helper.fail("ship A vanished before the trip"); return; }
+                    Vec3 dstWorld = new Vec3(helper.absolutePos(BlockPos.ZERO).getX() / 8.0,
+                            20.0, helper.absolutePos(BlockPos.ZERO).getZ() / 8.0);
+                    PortalTeleport.teleportToDimension(srcLevel, a, dstLevel, dstWorld, false, "test:rope");
+                })
+                .thenExecute(() -> {
+                    ServerSubLevel arrivedA = (ServerSubLevel) dstContainer.getSubLevel(subA[0]);
+                    ServerSubLevel arrivedB = (ServerSubLevel) dstContainer.getSubLevel(subB[0]);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] rope trip: A in dst={} B in dst={}",
+                            arrivedA != null, arrivedB != null);
+                    if (arrivedA == null || arrivedB == null) {
+                        helper.fail("both roped ships should travel together, got A=" + (arrivedA != null)
+                                + " B=" + (arrivedB != null));
+                        return;
+                    }
+
+                    BlockPos plotA = findBlockInPlot(dstLevel, arrivedA, connectorBlock);
+                    BlockPos plotB = findBlockInPlot(dstLevel, arrivedB, connectorBlock);
+                    if (plotA == null || plotB == null) { helper.fail("rope connector missing after the trip"); return; }
+
+                    Object strand = SimulatedRopeCompat.ownedStrand(dstLevel.getBlockEntity(plotA));
+                    if (strand == null) { helper.fail("the rope did not travel with the ships"); return; }
+
+                    for (SimulatedRopeCompat.AttachmentView attachment : SimulatedRopeCompat.attachmentsOf(strand)) {
+                        BlockPos expected = attachment.subLevelId() != null && attachment.subLevelId().equals(subB[0])
+                                ? plotB : plotA;
+                        AeroPortals.LOGGER.info("[AeroPortals/test] rope end on sub {} at {} (connector is at {})",
+                                attachment.subLevelId(), attachment.blockPos(), expected);
+                        if (!attachment.blockPos().equals(expected)) {
+                            helper.fail("rope end for sub " + attachment.subLevelId() + " points at "
+                                    + attachment.blockPos() + " but its connector is at " + expected);
+                            return;
+                        }
+                    }
+                })
+                .thenSucceed();
+    }
+
+    private static boolean connectRope(ServerLevel level, BlockPos from, BlockPos to) {
+        try {
+            Class<?> behaviourClass = Class.forName("dev.simulated_team.simulated.content.blocks.rope.RopeStrandHolderBehavior");
+            Object type = behaviourClass.getField("TYPE").get(null);
+            Class<?> createBehaviour = Class.forName("com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour");
+            Method get = null;
+            for (Method m : createBehaviour.getMethods()) {
+                if (m.getName().equals("get") && m.getParameterCount() == 2
+                        && m.getParameterTypes()[0] == BlockEntity.class) {
+                    get = m;
+                    break;
+                }
+            }
+            if (get == null) return false;
+            Object fromBehaviour = get.invoke(null, level.getBlockEntity(from), type);
+            Object toBehaviour = get.invoke(null, level.getBlockEntity(to), type);
+            if (fromBehaviour == null || toBehaviour == null) return false;
+            return (Boolean) behaviourClass.getMethod("createRope", behaviourClass, boolean.class).invoke(fromBehaviour, toBehaviour, true);
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            AeroPortals.LOGGER.warn("[AeroPortals/test] could not tie a rope: {}", e.toString());
+            return false;
+        }
+    }
+
     @GameTest(batch = "teleport_liftsShipAboveBlockedLanding", template = EMPTY, timeoutTicks = 200)
     public static void teleport_liftsShipAboveBlockedLanding(GameTestHelper helper) {
         GameTestSupport.isolate(helper);
@@ -1855,6 +1985,20 @@ public class PortalGameTests {
                 for (int y = centre.getY() - radius; y <= topY; y++) {
                     cursor.set(centre.getX() + dx, y, centre.getZ() + dz);
                     level.setBlock(cursor, state, Block.UPDATE_CLIENTS);
+                }
+            }
+        }
+    }
+
+    private static void clearNetherShaft(ServerLevel level, BlockPos centre, int radius, int depth) {
+        BlockState air = Blocks.AIR.defaultBlockState();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int dx = -radius; dx <= radius; dx++) {
+            for (int dz = -radius; dz <= radius; dz++) {
+                for (int y = centre.getY() + radius; y >= centre.getY() - depth; y--) {
+                    cursor.set(centre.getX() + dx, y, centre.getZ() + dz);
+                    if (level.getBlockState(cursor).isAir()) continue;
+                    level.setBlock(cursor, air, Block.UPDATE_CLIENTS);
                 }
             }
         }
