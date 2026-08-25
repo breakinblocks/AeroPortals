@@ -2,13 +2,12 @@ package com.breakinblocks.aeroportals.events;
 
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.util.AabbUtil;
+import com.breakinblocks.aeroportals.util.PortalBlockSearch;
 import dev.ryanhcode.sable.Sable;
 import dev.ryanhcode.sable.api.entity.EntitySubLevelUtil;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.BoundingBox3d;
 import dev.ryanhcode.sable.sublevel.SubLevel;
-import com.breakinblocks.aeroportals.api.AeroPortalsApi;
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -75,23 +74,6 @@ public final class VanillaPortalCanceller {
     }
 
     private static boolean isOverlappingPortal(ServerLevel level, SubLevel sub) {
-        AABB aabb = AabbUtil.worldAabb(sub).inflate(1.0);
-        int x0 = (int) Math.floor(aabb.minX);
-        int y0 = (int) Math.floor(aabb.minY);
-        int z0 = (int) Math.floor(aabb.minZ);
-        int x1 = (int) Math.floor(aabb.maxX);
-        int y1 = (int) Math.floor(aabb.maxY);
-        int z1 = (int) Math.floor(aabb.maxZ);
-        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int x = x0; x <= x1; x++) {
-            for (int y = y0; y <= y1; y++) {
-                for (int z = z0; z <= z1; z++) {
-                    cursor.set(x, y, z);
-                    if (!level.isLoaded(cursor)) continue;
-                    if (AeroPortalsApi.isPortalBlock(level.getBlockState(cursor))) return true;
-                }
-            }
-        }
-        return false;
+        return PortalBlockSearch.any(level, AabbUtil.worldAabb(sub).inflate(1.0));
     }
 }

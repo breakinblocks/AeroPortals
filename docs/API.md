@@ -62,6 +62,11 @@ public final class MyPortalType implements AeroPortalType {
     }
 
     @Override
+    public Collection<Block> matchedBlocks() {
+        return List.of(MyBlocks.RIFT.get());
+    }
+
+    @Override
     public boolean matches(BlockState state) {
         return state.is(MyBlocks.RIFT.get());
     }
@@ -83,9 +88,18 @@ Use `PortalDestination.of(level, pos, false, label)` to skip landing validation 
 the space is clear.
 
 `priority()` decides which type wins when two match the same block state (higher first, default 0).
-`isEnabled()` is checked on every lookup, so you can gate a type behind your own config. Server
+`isEnabled()` is checked once per scan, so you can gate a type behind your own config. Server
 owners can also switch your type off by adding its id to `travel_methods.disabled` in
 `aeroportals-server.toml`; that check happens alongside `isEnabled()` and needs nothing from you.
+
+`matchedBlocks()` is optional but strongly recommended. Return every block your type can match and
+AeroPortals indexes them, so scanning a ship skips whole chunk sections that cannot contain your
+portal and never calls `matches` on unrelated blocks. Return an empty collection (the default) only
+if your type cannot know its blocks up front; those types are tested against every block state in
+the palette of every section near a ship, which costs real server time. `matchedBlocks()` is read
+whenever the scan plan is rebuilt, so a block that only exists when another mod is present is fine
+as long as `isEnabled()` reports `false` until it does. If your set of blocks changes at runtime,
+call `AeroPortalsApi.invalidateScanPlan()` afterwards.
 
 Related helpers:
 

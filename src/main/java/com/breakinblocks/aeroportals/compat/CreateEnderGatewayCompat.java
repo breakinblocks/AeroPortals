@@ -72,6 +72,7 @@ public final class CreateEnderGatewayCompat {
     }
 
     public static Block portalBlock() {
+        if (!isAvailable()) return null;
         return portalBlock;
     }
 

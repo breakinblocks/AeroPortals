@@ -79,6 +79,11 @@ public final class ArsNouveauCompat {
         }
     }
 
+    public static Block portalBlock() {
+        if (!isAvailable()) return null;
+        return portalBlock;
+    }
+
     public static boolean isPortalBlock(BlockState state) {
         if (!isAvailable()) return false;
         return state.is(portalBlock);

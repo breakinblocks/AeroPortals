@@ -1,20 +1,20 @@
 package com.breakinblocks.aeroportals.portal;
 
 import com.breakinblocks.aeroportals.AeroPortals;
-import com.breakinblocks.aeroportals.api.AeroPortalType;
 import com.breakinblocks.aeroportals.api.AeroPortalsApi;
 import com.breakinblocks.aeroportals.api.PortalDestination;
+import com.breakinblocks.aeroportals.api.PortalScanPlan;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import com.breakinblocks.aeroportals.util.AabbUtil;
+import com.breakinblocks.aeroportals.util.PortalBlockSearch;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
-import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
 import java.util.List;
+import java.util.UUID;
 
 public final class PortalDetector {
     private PortalDetector() {}
@@ -26,33 +26,38 @@ public final class PortalDetector {
         List<ServerSubLevel> subs = container.getAllSubLevels();
         if (subs.isEmpty()) return;
 
+        PortalScanPlan plan = AeroPortalsApi.scanPlan();
+        if (plan.isEmpty()) return;
+
         long now = level.getServer().getTickCount();
         double maxVolume = AeroPortalsConfig.MAX_SUBLEVEL_AABB_VOLUME.get();
 
         for (ServerSubLevel sub : subs) {
             if (sub.isRemoved()) continue;
 
+            UUID id = sub.getUniqueId();
+            if (PortalCooldown.isOnCooldown(id, now)) continue;
+
             AABB aabb = AabbUtil.worldAabb(sub).inflate(1.0);
             double volume = aabb.getXsize() * aabb.getYsize() * aabb.getZsize();
             if (volume > maxVolume) {
-                AeroPortals.LOGGER.debug("[AeroPortals] skipping sub {} (volume {} > max {})", sub.getUniqueId(), volume, maxVolume);
+                AeroPortals.LOGGER.debug("[AeroPortals] skipping sub {} (volume {} > max {})", id, volume, maxVolume);
                 continue;
             }
 
-            PortalHit hit = findPortalBlock(level, aabb);
+            PortalBlockSearch.Hit hit = PortalBlockSearch.find(level, aabb, plan);
             if (hit == null) {
-                PortalCooldown.noteAwayFromPortal(sub.getUniqueId(), aabb.getCenter());
+                PortalCooldown.noteAwayFromPortal(id, aabb.getCenter());
                 continue;
             }
-            if (PortalCooldown.isOnCooldown(sub.getUniqueId(), now)) continue;
-            if (PortalCooldown.isSuppressedUntilLeftPortal(sub.getUniqueId())) continue;
+            if (PortalCooldown.isSuppressedUntilLeftPortal(id)) continue;
 
             dispatch(level, sub, hit);
-            PortalCooldown.mark(sub.getUniqueId(), now);
+            PortalCooldown.mark(id, now);
         }
     }
 
-    private static void dispatch(ServerLevel level, ServerSubLevel sub, PortalHit hit) {
+    private static void dispatch(ServerLevel level, ServerSubLevel sub, PortalBlockSearch.Hit hit) {
         AeroPortals.LOGGER.debug("[AeroPortals] sub {} overlaps {} portal at {} in dim {}",
                 sub.getUniqueId(), hit.type().id(), hit.pos(), level.dimension().location());
 
@@ -70,30 +75,5 @@ public final class PortalDetector {
             return;
         }
         PortalTeleport.dispatch(level, sub, destination);
-    }
-
-    private record PortalHit(BlockPos pos, AeroPortalType type) {}
-
-    private static PortalHit findPortalBlock(ServerLevel level, AABB aabb) {
-        int x0 = (int) Math.floor(aabb.minX);
-        int y0 = (int) Math.floor(aabb.minY);
-        int z0 = (int) Math.floor(aabb.minZ);
-        int x1 = (int) Math.floor(aabb.maxX);
-        int y1 = (int) Math.floor(aabb.maxY);
-        int z1 = (int) Math.floor(aabb.maxZ);
-
-        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-        for (int y = y0; y <= y1; y++) {
-            for (int x = x0; x <= x1; x++) {
-                for (int z = z0; z <= z1; z++) {
-                    cursor.set(x, y, z);
-                    if (!level.isLoaded(cursor)) continue;
-                    BlockState state = level.getBlockState(cursor);
-                    AeroPortalType type = AeroPortalsApi.findPortalType(state);
-                    if (type != null) return new PortalHit(cursor.immutable(), type);
-                }
-            }
-        }
-        return null;
     }
 }

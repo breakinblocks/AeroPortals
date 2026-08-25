@@ -13,9 +13,12 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +44,7 @@ public final class ScriptRegistry {
     static void reset() {
         FIXERS.clear();
         PORTALS.clear();
+        AeroPortalsApi.invalidateScanPlan();
     }
 
     static void addFixer(String blockEntityId, BlockEntityNbtFixer fixer) {
@@ -67,6 +71,7 @@ public final class ScriptRegistry {
             throw new IllegalArgumentException("portal '" + id + "' needs at least one block id");
         }
         PORTALS.add(new ScriptPortal(id, blocks, resolver));
+        AeroPortalsApi.invalidateScanPlan();
         installPortalDelegate();
     }
 
@@ -115,6 +120,18 @@ public final class ScriptRegistry {
         @Override
         public int priority() {
             return 100;
+        }
+
+        @Override
+        public Collection<Block> matchedBlocks() {
+            Set<Block> blocks = new LinkedHashSet<>();
+            for (ScriptPortal portal : PORTALS) {
+                for (ResourceLocation blockId : portal.blocks()) {
+                    Block block = BuiltInRegistries.BLOCK.get(blockId);
+                    if (block != null && block != Blocks.AIR) blocks.add(block);
+                }
+            }
+            return blocks;
         }
 
         @Override

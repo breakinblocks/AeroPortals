@@ -5,20 +5,29 @@ import com.breakinblocks.aeroportals.api.nbt.BlockEntityNbtFixer;
 import com.breakinblocks.aeroportals.api.nbt.NbtFixContext;
 import com.breakinblocks.aeroportals.config.TravelMethods;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class AeroPortalsApi {
     private static final List<AeroPortalType> PORTAL_TYPES = new CopyOnWriteArrayList<>();
     private static final Map<String, List<BlockEntityNbtFixer>> NBT_FIXERS = new ConcurrentHashMap<>();
     private static final List<TransferCarrier<?>> CARRIERS = new CopyOnWriteArrayList<>();
+    private static final AtomicLong REGISTRY_GENERATION = new AtomicLong();
+
+    private static volatile PortalScanPlan cachedPlan;
+    private static volatile long planRegistryGeneration = -1L;
+    private static volatile long planTravelGeneration = -1L;
+    private static volatile int planEnabledHash;
 
     private AeroPortalsApi() {}
 
@@ -31,6 +40,7 @@ public final class AeroPortalsApi {
         }
         PORTAL_TYPES.add(type);
         PORTAL_TYPES.sort(Comparator.comparingInt(AeroPortalType::priority).reversed());
+        REGISTRY_GENERATION.incrementAndGet();
         AeroPortals.LOGGER.debug("[AeroPortals] registered portal type {} (priority {})", type.id(), type.priority());
     }
 
@@ -60,17 +70,81 @@ public final class AeroPortalsApi {
         return List.copyOf(PORTAL_TYPES);
     }
 
+    public static void invalidateScanPlan() {
+        REGISTRY_GENERATION.incrementAndGet();
+    }
+
+    public static PortalScanPlan scanPlan() {
+        long registryGeneration = REGISTRY_GENERATION.get();
+        long travelGeneration = TravelMethods.generation();
+        int enabledHash = enabledHash();
+
+        PortalScanPlan plan = cachedPlan;
+        if (plan != null
+                && planRegistryGeneration == registryGeneration
+                && planTravelGeneration == travelGeneration
+                && planEnabledHash == enabledHash) {
+            return plan;
+        }
+
+        plan = buildPlan();
+        cachedPlan = plan;
+        planRegistryGeneration = registryGeneration;
+        planTravelGeneration = travelGeneration;
+        planEnabledHash = enabledHash;
+        return plan;
+    }
+
     public static AeroPortalType findPortalType(BlockState state) {
+        return scanPlan().match(state);
+    }
+
+    private static int enabledHash() {
+        int hash = 1;
         for (AeroPortalType type : PORTAL_TYPES) {
-            if (!type.isEnabled()) continue;
-            if (!TravelMethods.isEnabled(type.id())) continue;
+            hash = hash * 31 + (isActive(type) ? 1 : 0);
+        }
+        return hash;
+    }
+
+    private static boolean isActive(AeroPortalType type) {
+        try {
+            return type.isEnabled() && TravelMethods.isEnabled(type.id());
+        } catch (RuntimeException e) {
+            AeroPortals.LOGGER.error("[AeroPortals] portal type {} threw while reporting whether it is enabled", type.id(), e);
+            return false;
+        }
+    }
+
+    private static PortalScanPlan buildPlan() {
+        Map<Block, List<AeroPortalType>> byBlock = new IdentityHashMap<>();
+        List<AeroPortalType> unindexed = new ArrayList<>();
+
+        for (AeroPortalType type : PORTAL_TYPES) {
+            if (!isActive(type)) continue;
+
+            Collection<Block> blocks;
             try {
-                if (type.matches(state)) return type;
+                blocks = type.matchedBlocks();
             } catch (RuntimeException e) {
-                AeroPortals.LOGGER.error("[AeroPortals] portal type {} threw while matching {}", type.id(), state, e);
+                AeroPortals.LOGGER.error("[AeroPortals] portal type {} threw while listing its blocks", type.id(), e);
+                blocks = List.of();
+            }
+
+            if (blocks == null || blocks.isEmpty()) {
+                unindexed.add(type);
+                continue;
+            }
+            for (Block block : blocks) {
+                if (block != null) byBlock.computeIfAbsent(block, k -> new ArrayList<>()).add(type);
             }
         }
-        return null;
+
+        if (byBlock.isEmpty() && unindexed.isEmpty()) return PortalScanPlan.EMPTY;
+
+        Map<Block, List<AeroPortalType>> indexed = new IdentityHashMap<>(byBlock.size());
+        byBlock.forEach((block, types) -> indexed.put(block, List.copyOf(types)));
+        return new PortalScanPlan(indexed, List.copyOf(unindexed));
     }
 
     public static boolean isPortalBlock(BlockState state) {

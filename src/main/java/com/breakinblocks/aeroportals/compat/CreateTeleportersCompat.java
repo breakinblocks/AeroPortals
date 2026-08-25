@@ -76,6 +76,11 @@ public final class CreateTeleportersCompat {
         return true;
     }
 
+    public static List<Block> portalBlocks() {
+        if (!isAvailable()) return List.of();
+        return portalBlocks;
+    }
+
     public static boolean isPortalBlock(BlockState state) {
         if (!isAvailable()) return false;
         for (Block block : portalBlocks) {
