@@ -13,6 +13,8 @@ import com.breakinblocks.aeroportals.compat.TropicraftCompat;
 import com.breakinblocks.aeroportals.config.TravelMethods;
 import com.breakinblocks.aeroportals.portal.EndPortalLanding;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
+import com.breakinblocks.aeroportals.portal.ShipDirectory;
+import com.breakinblocks.aeroportals.portal.ShipRecovery;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
@@ -44,11 +46,14 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @EventBusSubscriber(modid = AeroPortals.MOD_ID)
 public final class AeroPortalsCommands {
     private static final int OP_LEVEL = 2;
     private static final String ARG_DIMENSION = "dimension";
+    private static final String ARG_SHIP = "ship";
+    private static final int MAX_LISTED_SHIPS = 30;
 
     private AeroPortalsCommands() {}
 
@@ -67,7 +72,18 @@ public final class AeroPortalsCommands {
                                         .executes(ctx -> runTeleport(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, ARG_DIMENSION)))))
                         .then(Commands.literal("methods")
-                                .executes(ctx -> listMethods(ctx.getSource()))));
+                                .executes(ctx -> listMethods(ctx.getSource())))
+                        .then(Commands.literal("ships")
+                                .executes(ctx -> listShips(ctx.getSource(), null))
+                                .then(Commands.argument(ARG_DIMENSION, StringArgumentType.string())
+                                        .suggests(SUGGEST_DIMENSIONS)
+                                        .executes(ctx -> listShips(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, ARG_DIMENSION)))))
+                        .then(Commands.literal("recover")
+                                .then(Commands.argument(ARG_SHIP, StringArgumentType.string())
+                                        .suggests(SUGGEST_SHIPS)
+                                        .executes(ctx -> recoverShip(ctx.getSource(),
+                                                StringArgumentType.getString(ctx, ARG_SHIP))))));
     }
 
     private static final SuggestionProvider<CommandSourceStack> SUGGEST_DIMENSIONS = (ctx, builder) -> {
@@ -137,6 +153,89 @@ public final class AeroPortalsCommands {
                 Set.<RelativeMovement>of(), player.getYRot(), player.getXRot());
         AeroPortals.LOGGER.debug("[AeroPortals] OP command: teleported player {} to {} at {}",
                 player.getGameProfile().getName(), dstKeyFinal.location(), dstPos);
+        return 1;
+    }
+
+    private static final SuggestionProvider<CommandSourceStack> SUGGEST_SHIPS = (ctx, builder) -> {
+        ServerLevel level = ctx.getSource().getLevel();
+        for (ShipDirectory.Entry entry : ShipDirectory.list(level)) {
+            String id = entry.uuid().toString();
+            if (id.toLowerCase().startsWith(builder.getRemainingLowerCase())) {
+                builder.suggest(id);
+            }
+        }
+        return builder.buildFuture();
+    };
+
+    private static int listShips(CommandSourceStack source, String dimensionArg) {
+        ServerLevel level = source.getLevel();
+        if (dimensionArg != null) {
+            ResourceKey<Level> key = resolveDimensionKey(dimensionArg);
+            if (key == null) {
+                source.sendFailure(Component.literal("Unknown dimension: " + dimensionArg));
+                return 0;
+            }
+            level = source.getServer().getLevel(key);
+            if (level == null) {
+                source.sendFailure(Component.literal("Dimension '" + key.location() + "' is not loaded on this server."));
+                return 0;
+            }
+        }
+
+        List<ShipDirectory.Entry> entries = ShipDirectory.list(level);
+        ServerLevel listed = level;
+        if (entries.isEmpty()) {
+            source.sendSuccess(() -> Component.literal("No airships in " + listed.dimension().location())
+                    .withStyle(ChatFormatting.GRAY), false);
+            return 0;
+        }
+
+        source.sendSuccess(() -> Component.literal("Airships in " + listed.dimension().location()
+                + " (" + entries.size() + ")").withStyle(ChatFormatting.AQUA), false);
+        int shown = 0;
+        for (ShipDirectory.Entry entry : entries) {
+            if (shown++ >= MAX_LISTED_SHIPS) break;
+            ChatFormatting colour = switch (entry.state()) {
+                case LOADED -> ChatFormatting.GREEN;
+                case HELD -> ChatFormatting.YELLOW;
+                case STORED -> ChatFormatting.GOLD;
+            };
+            String state = switch (entry.state()) {
+                case LOADED -> "flying";
+                case HELD -> "parked";
+                case STORED -> "stored";
+            };
+            String name = entry.name() == null || entry.name().isBlank() ? "" : " \"" + entry.name() + "\"";
+            source.sendSuccess(() -> Component.literal("  " + state + name + " at " + formatVec(entry.position())
+                    + "  " + entry.uuid()).withStyle(colour), false);
+        }
+        if (entries.size() > MAX_LISTED_SHIPS) {
+            int hidden = entries.size() - MAX_LISTED_SHIPS;
+            source.sendSuccess(() -> Component.literal("  ... and " + hidden + " more")
+                    .withStyle(ChatFormatting.DARK_GRAY), false);
+        }
+        source.sendSuccess(() -> Component.literal("stored and parked airships come back on their own once someone is near them; "
+                + "/aeroportals recover <id> brings one to you").withStyle(ChatFormatting.DARK_GRAY), false);
+        return entries.size();
+    }
+
+    private static int recoverShip(CommandSourceStack source, String shipArg) {
+        UUID uuid;
+        try {
+            uuid = UUID.fromString(shipArg.trim());
+        } catch (IllegalArgumentException e) {
+            source.sendFailure(Component.literal("That is not an airship id. Run /aeroportals ships to see them."));
+            return 0;
+        }
+
+        ServerLevel level = source.getLevel();
+        Vec3 target = source.getPosition();
+        boolean started = ShipRecovery.start(level, uuid, target, component -> source.sendSuccess(() -> component, true));
+        if (!started) {
+            source.sendFailure(Component.literal("No airship with id " + uuid + " in " + level.dimension().location()
+                    + ". Run /aeroportals ships in the dimension it was lost in."));
+            return 0;
+        }
         return 1;
     }
 
