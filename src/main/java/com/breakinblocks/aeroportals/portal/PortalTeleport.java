@@ -630,7 +630,7 @@ public final class PortalTeleport {
         }
 
         for (PendingMove pm : pending) {
-            holdDestinationChunks(dstLevel, pm.dstPos);
+            holdDestinationChunks(dstLevel, pm.dstPos, holdRadiusFor(pm.sub));
         }
 
         if (validateLanding) {
@@ -929,14 +929,26 @@ public final class PortalTeleport {
     }
 
     private static final int DESTINATION_HOLD_CHUNK_RADIUS = 2;
+    private static final int MAX_HOLD_CHUNK_RADIUS = 8;
     private static final TicketType<ChunkPos> ARRIVAL_TICKET =
             TicketType.create("aeroportals_arrival", Comparator.comparingLong(ChunkPos::toLong), 60);
 
     public static void holdDestinationChunks(ServerLevel dstLevel, Vec3 dstPos) {
+        holdDestinationChunks(dstLevel, dstPos, DESTINATION_HOLD_CHUNK_RADIUS);
+    }
+
+    public static void holdDestinationChunks(ServerLevel dstLevel, Vec3 dstPos, int chunkRadius) {
         ChunkPos chunkPos = new ChunkPos(BlockPos.containing(dstPos));
-        dstLevel.getChunkSource().addRegionTicket(ARRIVAL_TICKET, chunkPos, DESTINATION_HOLD_CHUNK_RADIUS, chunkPos);
-        AeroPortals.LOGGER.debug("[AeroPortals] holding destination chunks around {} in {} while the ship arrives",
-                chunkPos, dstLevel.dimension().location());
+        int radius = Math.min(MAX_HOLD_CHUNK_RADIUS, Math.max(DESTINATION_HOLD_CHUNK_RADIUS, chunkRadius));
+        dstLevel.getChunkSource().addRegionTicket(ARRIVAL_TICKET, chunkPos, radius, chunkPos);
+        AeroPortals.LOGGER.debug("[AeroPortals] holding destination chunks within {} chunk(s) of {} in {} while the ship arrives",
+                radius, chunkPos, dstLevel.dimension().location());
+    }
+
+    private static int holdRadiusFor(ServerSubLevel sub) {
+        AABB box = AabbUtil.worldAabb(sub);
+        double halfSpan = Math.max(box.getXsize(), box.getZsize()) / 2.0;
+        return (int) Math.ceil((halfSpan + 16.0) / 16.0);
     }
 
     private record DestinationResolution(PortalRect rect, boolean generated) {}

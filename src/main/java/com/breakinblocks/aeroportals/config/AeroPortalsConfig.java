@@ -19,6 +19,8 @@ public final class AeroPortalsConfig {
     public static final ModConfigSpec.BooleanValue ONBOARD_PORTAL_JUMPS;
     public static final ModConfigSpec.IntValue ONBOARD_JUMP_DELAY_TICKS;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_TRAVEL_METHODS;
+    public static final ModConfigSpec.BooleanValue CATCH_FALLING_SHIPS;
+    public static final ModConfigSpec.IntValue CATCH_SHIPS_BELOW_FLOOR;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -60,6 +62,17 @@ public final class AeroPortalsConfig {
         ONBOARD_JUMP_DELAY_TICKS = builder
                 .comment("Ticks between an onboard portal being lit and the ship jumping. Gives riders time to abort by breaking the portal.")
                 .defineInRange("onboard_jump_delay_ticks", 100, 0, 24000);
+        builder.pop();
+
+        builder.push("safety");
+        CATCH_FALLING_SHIPS = builder
+                .comment("Catch airships that fall out of the bottom of a dimension and set them down safely.",
+                        "A ship that keeps falling is destroyed by the physics engine along with everything on board, with no drops and no way to get it back.",
+                        "Turn this off only if you want that to happen.")
+                .define("catch_falling_ships", true);
+        CATCH_SHIPS_BELOW_FLOOR = builder
+                .comment("How far below the bottom of a dimension an airship has to fall before it is caught and set down.")
+                .defineInRange("catch_ships_below_floor", 64, 0, 512);
         builder.pop();
 
         builder.push("travel_methods");

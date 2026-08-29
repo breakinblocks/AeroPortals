@@ -7,6 +7,7 @@ import com.breakinblocks.aeroportals.api.nbt.NbtFixContext;
 import com.breakinblocks.aeroportals.compat.CreateContraptionCompat;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
+import dev.ryanhcode.sable.companion.math.BoundingBox3d;
 import dev.ryanhcode.sable.companion.math.BoundingBox3i;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.companion.math.Pose3d;
@@ -101,6 +102,13 @@ public final class SableBridge {
         pose.position().set(dstWorldPos.x, dstWorldPos.y, dstWorldPos.z);
         tag.put("pose", SableNBTUtils.writePose3d(pose));
 
+        Vec3 worldTranslation = dstWorldPos.subtract(srcWorldPos);
+        if (tag.contains("world_bounds")) {
+            BoundingBox3d worldBounds = SableNBTUtils.readBoundingBox(tag.getCompound("world_bounds"));
+            worldBounds.move(worldTranslation.x, worldTranslation.y, worldTranslation.z);
+            tag.put("world_bounds", SableNBTUtils.writeBoundingBox(worldBounds));
+        }
+
         TeleportJournal.write(
                 srcLevel.getServer(), data.uuid(),
                 srcLevel.dimension().location(), dstLevel.dimension().location(),
@@ -110,7 +118,7 @@ public final class SableBridge {
         AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: removed source sub-level");
 
         SourceInfo sourceInfo = new SourceInfo(srcLevel.dimension(), srcLevel.getMinBuildHeight(),
-                dstWorldPos.subtract(srcWorldPos), oldRegionMin, regionBlocks);
+                worldTranslation, oldRegionMin, regionBlocks);
 
         Loaded loaded;
         try {
@@ -289,6 +297,7 @@ public final class SableBridge {
                 stripHeightmaps(plotTag);
             }
             offsetPlotCoordinates(plotTag, deltaX, deltaY, deltaZ);
+            offsetPoseRotationPoint(tag, deltaX, deltaY, deltaZ);
         }
 
         applyNbtFixers(plotTag, new NbtFixContext(
@@ -298,6 +307,12 @@ public final class SableBridge {
         ServerSubLevel loaded = SubLevelSerializer.fullyLoad(dstLevel, data);
         if (loaded == null) return null;
         return new Loaded(loaded, new BlockPos(deltaX, deltaY, deltaZ));
+    }
+
+    private static void offsetPoseRotationPoint(CompoundTag tag, int deltaX, int deltaY, int deltaZ) {
+        Pose3d pose = SableNBTUtils.readPose3d(tag.getCompound("pose"));
+        pose.rotationPoint().add(deltaX, deltaY, deltaZ);
+        tag.put("pose", SableNBTUtils.writePose3d(pose));
     }
 
     private static void applyNbtFixers(CompoundTag plotTag, NbtFixContext context) {

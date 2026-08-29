@@ -91,6 +91,14 @@ Add three coordinates after the dimension to pick the landing spot yourself, for
 
 Lists every way of travelling AeroPortals knows about, with the id you would put in the config to switch it off and whether it is currently on. See [Turning travel methods off](#turning-travel-methods-off).
 
+### `/aeroportals ships [dimension]` (op only)
+
+Lists the airships in a dimension, with coordinates and an id for each one. Ships show as `flying` when they are loaded and running, `parked` when the game has set them aside because nobody is nearby, and `stored` when they are only in the save file. Parked and stored ships come back on their own when a player gets close to them. Without a dimension it lists the one you are standing in.
+
+### `/aeroportals recover <id>` (op only)
+
+Brings the airship with that id to where you are standing. Use it when a ship has ended up somewhere nobody can get to. Take the id from `/aeroportals ships`, run the command in the dimension the ship is in, and stand somewhere with room for it to sit.
+
 ## For server admins
 
 ### Requirements
@@ -127,6 +135,8 @@ If an optional mod isn't installed, that integration is simply inactive: no erro
 | `teleport.dest_portal_search_radius` | `128` | How far AeroPortals looks for an existing matching portal at the destination before deciding to build a new one. |
 | `teleport.generate_matching_portal` | `true` | If `false`, the teleport aborts when no destination portal is found instead of building one. |
 | `teleport.clear_velocity_on_arrival` | `false` | If `true`, ships arrive from a teleport standing still. By default they keep their momentum. |
+| `safety.catch_falling_ships` | `true` | Catch an airship that falls out of the bottom of a dimension and set it down safely. Without this the physics engine destroys the ship and everything on board once it is far enough below the world, with no drops. |
+| `safety.catch_ships_below_floor` | `64` | How far below the bottom of a dimension a ship has to fall before it is caught. |
 | `travel_methods.disabled` | `[]` | Ways of travelling AeroPortals should leave alone. See [Turning travel methods off](#turning-travel-methods-off). |
 
 ### Turning travel methods off

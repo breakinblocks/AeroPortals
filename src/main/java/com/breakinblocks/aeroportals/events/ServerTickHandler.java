@@ -9,6 +9,8 @@ import com.breakinblocks.aeroportals.portal.OnboardPortalJump;
 import com.breakinblocks.aeroportals.portal.PortalDetector;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.portal.TeleportJournal;
+import com.breakinblocks.aeroportals.portal.ShipRecovery;
+import com.breakinblocks.aeroportals.portal.VoidFallGuard;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -37,12 +39,14 @@ public final class ServerTickHandler {
         PortalTeleport.DeferredVelocityRestores.tick(server.getTickCount());
         PortalTeleport.DeferredRiderSettles.tick(server.getTickCount());
         Ae2SpatialCompat.tick(server);
+        ShipRecovery.tick(server);
 
         long t = ++tick;
         int interval = AeroPortalsConfig.SCAN_INTERVAL_TICKS.get();
         if (t % interval != 0) return;
 
         for (ServerLevel level : server.getAllLevels()) {
+            VoidFallGuard.scan(level);
             PortalDetector.scan(level);
             OnboardPortalJump.scan(level);
             SpdStackCompat.scan(level);
