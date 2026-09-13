@@ -143,7 +143,13 @@ public final class AeroPortalsApi {
         if (byBlock.isEmpty() && unindexed.isEmpty()) return PortalScanPlan.EMPTY;
 
         Map<Block, List<AeroPortalType>> indexed = new IdentityHashMap<>(byBlock.size());
-        byBlock.forEach((block, types) -> indexed.put(block, List.copyOf(types)));
+        byBlock.forEach((block, types) -> {
+            List<AeroPortalType> ordered = new ArrayList<>();
+            for (AeroPortalType type : PORTAL_TYPES) {
+                if (types.contains(type) || unindexed.contains(type)) ordered.add(type);
+            }
+            indexed.put(block, List.copyOf(ordered));
+        });
         return new PortalScanPlan(indexed, List.copyOf(unindexed));
     }
 
