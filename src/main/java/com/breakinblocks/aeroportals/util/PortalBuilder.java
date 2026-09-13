@@ -37,6 +37,17 @@ public final class PortalBuilder {
         int px = perpendicular.getStepX();
         int pz = perpendicular.getStepZ();
 
+        // Validate the entire construction volume before clearing, framing or filling.
+        for (int i = -1; i <= width; i++) {
+            for (int j = -1; j <= height; j++) {
+                for (int p = -1; p <= 1; p++) {
+                    BlockPos pos = minCorner.offset(hx * i + px * p, j, hz * i + pz * p);
+                    if (!level.isInWorldBounds(pos) || !level.getWorldBorder().isWithinBounds(pos)
+                            || level.getBlockState(pos).getDestroySpeed(level, pos) < 0) return null;
+                }
+            }
+        }
+
         BlockState air = Blocks.AIR.defaultBlockState();
         BlockState frame = frameBlock.defaultBlockState();
         BlockState portal = portalState;

@@ -131,6 +131,7 @@ public final class PlayerPortalSizeMatcher {
 
         PortalRect built = PortalBuilder.build(dstLevel, buildOrigin, axis, src.width(), src.height(), frameBlock, portalState);
 
+        if (built == null) return;
         Vec3 landing = built.centerWorld();
         player.connection.teleport(landing.x, built.minCorner().getY(), landing.z, player.getYRot(), player.getXRot());
     }

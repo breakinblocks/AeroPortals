@@ -299,7 +299,7 @@ public final class PortalTeleport {
         PortalRect generated = PortalBuilder.build(
                 dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height(),
                 Blocks.GLOWSTONE, portalState);
-        return new DestinationResolution(generated, true);
+        return generated == null ? null : new DestinationResolution(generated, true);
     }
 
     public static PortalDestination resolveDeeperDarker(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
@@ -387,7 +387,7 @@ public final class PortalTeleport {
         PortalRect generated = PortalBuilder.build(
                 dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height(),
                 Blocks.REINFORCED_DEEPSLATE, portalState);
-        return new DestinationResolution(generated, true);
+        return generated == null ? null : new DestinationResolution(generated, true);
     }
 
     public static PortalDestination resolveArsNouveau(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
@@ -996,7 +996,7 @@ public final class PortalTeleport {
         AeroPortals.LOGGER.debug("[AeroPortals] generating matching portal at {} (axis={} {}x{})",
                 buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
         PortalRect generated = PortalBuilder.build(dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
-        return new DestinationResolution(generated, true);
+        return generated == null ? null : new DestinationResolution(generated, true);
     }
 
     private static BlockPos chooseBuildOrigin(BlockPos searchCenter, PortalRect srcRect) {
