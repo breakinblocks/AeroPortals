@@ -85,8 +85,14 @@ public final class PortalTeleport {
 
     public static boolean dispatchResult(ServerLevel srcLevel, ServerSubLevel sub, PortalDestination destination) {
         if (destination == null) return false;
-        return executeChainMove(srcLevel, sub, destination.level(), destination.subWorldPos(),
+        if (destination.construction() != null && !destination.construction().canBuild(destination.level())) return false;
+        boolean moved = executeChainMove(srcLevel, sub, destination.level(), destination.subWorldPos(),
                 destination.validateLanding(), destination.label());
+        if (moved && destination.construction() != null && destination.construction().build(destination.level()) == null) {
+            AeroPortals.LOGGER.warn("[AeroPortals] ship arrived but destination portal construction was blocked");
+        }
+        if (moved && destination.arrivalAction() != null) destination.arrivalAction().run();
+        return moved;
     }
 
     public static void teleport(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
@@ -136,7 +142,7 @@ public final class PortalTeleport {
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        return PortalDestination.of(dstLevel, dstWorld, true, "nether");
+        return PortalDestination.of(dstLevel, dstWorld, true, "nether").withConstruction(resolved.construction());
     }
 
     public static PortalDestination resolveOnboardNetherPortal(ServerLevel srcLevel, ServerSubLevel sub, PortalRect plotRect) {
@@ -179,7 +185,7 @@ public final class PortalTeleport {
                 srcLevel.dimension().location(), srcWorld, srcPortalCenter,
                 dstKey.location(), dstRect.centerWorld(), dstWorld, ratio, resolved.generated());
 
-        return PortalDestination.of(dstLevel, dstWorld, true, "onboard-portal");
+        return PortalDestination.of(dstLevel, dstWorld, true, "onboard-portal").withConstruction(resolved.construction());
     }
 
     public static PortalDestination resolveEnd(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
@@ -197,7 +203,6 @@ public final class PortalTeleport {
         Vec3 dstWorld;
         if (goingToEnd) {
             ensureChunksLoaded(dstLevel, EndPortalLanding.PLATFORM_CENTRE);
-            EndPortalLanding.ensurePlatform(dstLevel);
             dstWorld = clampToWorldBorder(dstLevel, EndPortalLanding.landingPosition(sub));
             AeroPortals.LOGGER.debug("[AeroPortals] end teleport (to End): src dim={} subPos={} portalBlock={} -> dst dim={} landing={} (platform-top y={})",
                     srcLevel.dimension().location(), srcWorld, srcPortalBlock,
@@ -211,7 +216,8 @@ public final class PortalTeleport {
         ensureChunksLoaded(dstLevel, BlockPos.containing(dstWorld));
         dstWorld = raiseLandingUntilClear(dstLevel, sub, dstWorld);
 
-        return PortalDestination.of(dstLevel, dstWorld, true, "end");
+        PortalDestination destination = PortalDestination.of(dstLevel, dstWorld, true, "end");
+        return goingToEnd ? destination.withArrivalAction(() -> EndPortalLanding.ensurePlatform(dstLevel)) : destination;
     }
 
     public static PortalDestination resolveAether(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
@@ -259,7 +265,7 @@ public final class PortalTeleport {
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        return PortalDestination.of(dstLevel, dstWorld, true, "aether");
+        return PortalDestination.of(dstLevel, dstWorld, true, "aether").withConstruction(resolved.construction());
     }
 
     private static DestinationResolution resolveAetherDestinationPortal(
@@ -296,10 +302,10 @@ public final class PortalTeleport {
                 .setValue(BlockStateProperties.HORIZONTAL_AXIS, srcRect.axis());
         AeroPortals.LOGGER.debug("[AeroPortals] generating matching aether portal at {} (axis={} {}x{})",
                 buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
-        PortalRect generated = PortalBuilder.build(
+        PortalBuilder.Plan generated = PortalBuilder.plan(
                 dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height(),
                 Blocks.GLOWSTONE, portalState);
-        return generated == null ? null : new DestinationResolution(generated, true);
+        return new DestinationResolution(generated.rect(), true, generated);
     }
 
     public static PortalDestination resolveDeeperDarker(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
@@ -347,7 +353,7 @@ public final class PortalTeleport {
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        return PortalDestination.of(dstLevel, dstWorld, true, "deeperdarker");
+        return PortalDestination.of(dstLevel, dstWorld, true, "deeperdarker").withConstruction(resolved.construction());
     }
 
     private static DestinationResolution resolveDeeperDarkerDestinationPortal(
@@ -384,10 +390,10 @@ public final class PortalTeleport {
                 .setValue(BlockStateProperties.HORIZONTAL_AXIS, srcRect.axis());
         AeroPortals.LOGGER.debug("[AeroPortals] generating matching deeperdarker portal at {} (axis={} {}x{})",
                 buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
-        PortalRect generated = PortalBuilder.build(
+        PortalBuilder.Plan generated = PortalBuilder.plan(
                 dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height(),
                 Blocks.REINFORCED_DEEPSLATE, portalState);
-        return generated == null ? null : new DestinationResolution(generated, true);
+        return new DestinationResolution(generated.rect(), true, generated);
     }
 
     public static PortalDestination resolveArsNouveau(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
@@ -658,10 +664,14 @@ public final class PortalTeleport {
             boolean clearBlocks = AeroPortalsConfig.CLEAR_DESTINATION_BLOCKS.get();
             if (clearBlocks) {
                 for (PendingMove pm : pending) {
-                    int cleared = clearLandingSpace(dstLevel, pm.sub, pm.srcPos, pm.dstPos);
-                    if (cleared > 0) {
-                        AeroPortals.LOGGER.debug("[AeroPortals] {} teleport: cleared {} destination block(s) for sub {}",
-                                contextLabel, cleared, pm.sub.getUniqueId());
+                    AABB box = AabbUtil.worldAabb(pm.sub).move(pm.dstPos.subtract(pm.srcPos));
+                    for (BlockPos pos : BlockPos.betweenClosed(BlockPos.containing(box.minX, box.minY, box.minZ),
+                            BlockPos.containing(box.maxX - 1e-6, box.maxY - 1e-6, box.maxZ - 1e-6))) {
+                        BlockState state = dstLevel.getBlockState(pos);
+                        if (state.getDestroySpeed(dstLevel, pos) < 0 && !isPortalRelated(dstLevel, pos)) {
+                            messageAbort(srcLevel, dstLevel, chain, pos, state);
+                            return false;
+                        }
                     }
                 }
             } else {
@@ -978,7 +988,9 @@ public final class PortalTeleport {
         return (int) Math.ceil((halfSpan + 16.0) / 16.0);
     }
 
-    private record DestinationResolution(PortalRect rect, boolean generated) {}
+    private record DestinationResolution(PortalRect rect, boolean generated, PortalBuilder.Plan construction) {
+        DestinationResolution(PortalRect rect, boolean generated) { this(rect, generated, null); }
+    }
 
     private static DestinationResolution resolveDestinationPortal(ServerLevel dstLevel, PortalRect srcRect, BlockPos searchCenter) {
         int radius = AeroPortalsConfig.DEST_PORTAL_SEARCH_RADIUS.get();
@@ -1009,8 +1021,8 @@ public final class PortalTeleport {
         BlockPos buildPos = chooseBuildOrigin(searchCenter, srcRect);
         AeroPortals.LOGGER.debug("[AeroPortals] generating matching portal at {} (axis={} {}x{})",
                 buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
-        PortalRect generated = PortalBuilder.build(dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
-        return generated == null ? null : new DestinationResolution(generated, true);
+        PortalBuilder.Plan generated = PortalBuilder.plan(dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
+        return new DestinationResolution(generated.rect(), true, generated);
     }
 
     private static BlockPos chooseBuildOrigin(BlockPos searchCenter, PortalRect srcRect) {
