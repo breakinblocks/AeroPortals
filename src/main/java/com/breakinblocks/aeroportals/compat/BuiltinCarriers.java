@@ -48,7 +48,7 @@ public final class BuiltinCarriers {
 
             List<CompoundTag> saved = new ArrayList<>();
             for (Entity e : srcLevel.getEntities((Entity) null, plotAabb.inflate(1.0),
-                    e -> e.getType().is(WALL_ENTITIES))) {
+                    e -> e instanceof net.minecraft.world.entity.decoration.HangingEntity || e.getType().is(WALL_ENTITIES))) {
                 CompoundTag tag = new CompoundTag();
                 if (!e.save(tag)) continue;
                 saved.add(tag);
