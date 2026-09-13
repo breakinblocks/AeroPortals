@@ -39,14 +39,17 @@ matter, except for transfer carriers, which are noted below.
 1. AeroPortals notices an airship (a Sable SubLevel) overlapping a portal block, and asks the matching
    **portal type** where it should go.
 2. `SubLevelPreTransferEvent` fires. Listeners can veto the move or move the destination.
-3. The landing site is validated (or cleared, per server config).
-4. For each SubLevel in the dependency chain: **transfer carriers** capture, the SubLevel is snapshotted,
-   removed from the source dimension, and reloaded in the destination.
+3. The complete group is checked for cooldown, destination capacity, carrier constraints and landing clearance.
+4. **Transfer carriers** capture and every SubLevel is snapshotted. All ship snapshots and carrier payloads
+   are journaled before any source ship is removed. Every destination ship loads before carriers reconnect.
 5. While reloading, **NBT fixers** rewrite each block entity tag before it becomes a live block entity.
 6. Carriers replay in reverse registration order, riders are placed, and `SubLevelTransferEvent` fires.
+7. Destination construction and configured landing clearance run only after a successful move. Recovery
+   entries are retained until the ship saves and source retirement have been verified.
 
-If the destination load fails, the SubLevel is restored to the source dimension and carriers replay
-there instead, so a failed transfer looks the same to your code as one that never started.
+If destination loading or carrier replay fails, the entire group is restored to the source dimension.
+Incomplete rollback keeps its journal for recovery on startup. Recovery also replays carriers and transfer
+events, so addon handlers must tolerate repeated calls.
 
 ---
 
@@ -188,7 +191,11 @@ public final class GlueCarrier implements TransferCarrier<List<AABB>> {
     @Override
     public void replay(ServerLevel dstLevel, ServerSubLevel newSub, List<AABB> captured, BlockPos plotShift) {
         for (AABB box : captured) {
-            dstLevel.addFreshEntity(new MyGlue(dstLevel, box.move(plotShift.getX(), plotShift.getY(), plotShift.getZ())));
+            AABB shifted = box.move(plotShift.getX(), plotShift.getY(), plotShift.getZ());
+            if (alreadyHasGlue(dstLevel, shifted)) continue;
+            if (!dstLevel.addFreshEntity(new MyGlue(dstLevel, shifted))) {
+                throw new IllegalStateException("Destination rejected glue");
+            }
         }
     }
 }
@@ -201,6 +208,22 @@ gets the first look at the ship and the last word on the destination. `replay` r
 after a successful move, or back on the source if the move failed and the ship was restored; in both
 cases `plotShift` is the shift that actually happened. Returning `null` from `capture` skips replay.
 `isEnabled()` is checked before each capture.
+
+`replay` must leave the captured payload unchanged, avoid creating duplicates when called again, and
+throw if restoration fails. A failed replay triggers group rollback and preserves unresolved recovery data.
+`capture` must either return the complete payload or restore its own partial changes before throwing.
+
+The default `serialize` and `deserialize` methods support `CompoundTag`, `String`, `BlockPos`, `AABB`,
+and lists of supported values. Other payload types must implement both methods with a stable NBT format.
+Payloads are stored under the carrier's `id`, which must remain available during restart recovery.
+
+`discard(level, sub)` removes an abandoned copy's attachments during rollback or recovery. Its default
+calls `capture` and drops the returned payload. Override it when capture is non-destructive or when
+cleanup needs different handling; never remove another dimension's already-restored shared state.
+
+Use `validateGroup(source, group, destination)` to reject transfers whose external links cannot be
+preserved. Throw an exception before capture starts; for example, reject a connection to a ship that
+is outside the travelling group.
 
 ---
 

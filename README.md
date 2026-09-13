@@ -2,7 +2,7 @@
 
 Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/create-aeronautics) airship through a portal and the whole ship goes with you. Players, passengers, decorations, and item frames travel together. AeroPortals is the bridge between Create's airships ([Sable](https://www.curseforge.com/minecraft/mc-mods/sable) physics) and Minecraft's portal system.
 
-> Status: public beta. The core flow works end-to-end and is covered by 63 automated tests, but expect rough edges. See [Known limitations](#known-limitations).
+> Status: public beta. The core flow is covered by automated GameTests, including transfer rollback and recovery checks, but expect rough edges. See [Known limitations](#known-limitations).
 
 ## Warning
 
@@ -14,7 +14,7 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 - **End portals** Sail onto an end portal and the ship lands at the vanilla End spawn point. The 5x5 obsidian spawn pad is rebuilt if missing. Travelling back from the End drops you near world spawn.
 
-- **Onboard portal jump drives** (off by default; enable `onboard_portal_jumps` in the server config). Build a nether portal into your ship and light it mid-flight: after a short countdown the whole ship jumps to the other dimension, portal and all, like a spaceship performing a jump. A matching portal is linked or built at the destination beside where you arrive. Break or extinguish the onboard portal during the countdown to abort, and re-light it whenever you want to jump again.
+- **Onboard portal jump drives** (off by default; enable `onboard_portal_jumps` in the server config). Build a nether portal into your ship and light it mid-flight: after a short countdown the whole ship jumps to the other dimension, portal and all. A matching portal is linked or built beside your arrival unless `onboard_generate_destination_portal` is disabled; then the jump uses scaled coordinates and a clear landing spot. Failed jumps tell nearby riders and retry while the portal stays lit. Break or extinguish the portal to abort, and re-light it after a successful jump to charge again.
 
 - **Non-destructive landings** If your destination is blocked by terrain or builds, AeroPortals lifts your ship straight up until it finds clear air and puts it down there, so arriving beside a portal built into a hillside or on the ground does not cost you the trip. Ships travelling together are lifted by the same amount and keep their formation. If there is no clear space above either, AeroPortals tells you in chat which block is in the way and cancels the teleport: your ship stays where it is, and the destination side is never modified. Server admins who would rather have big ships carve their own landing zone can enable `clear_destination_blocks` in the server config: blocking blocks at the destination are then destroyed (without drops) instead of cancelling the trip. Portal blocks, portal frames, and unbreakable blocks are always left intact.
 
@@ -35,6 +35,8 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 - **Create: Teleporters portals** (when [Create: Teleporters](https://www.curseforge.com/minecraft/mc-mods/create-teleporters) is installed). Fly your ship into a custom portal frame and it travels to the portal's configured destination, whether that is a set of TP Link coordinates or another linked portal, in any dimension.
 
 - **Roped ships travel as a set** (when [Create: Simulated](https://www.curseforge.com/minecraft/mc-mods/create-aeronautics) is installed). Fly one of a pair of roped ships into a portal and its partner comes through with it, still on the rope, however far apart they are. The rope keeps its length and stays attached to the same connectors on both ships.
+
+- **Control links stay connected.** Drive By Wire connections and Gadgets & Gizmos contraption links move with their ships. Cross-dimension travel is rejected if a link has an endpoint outside the travelling group, keeping that connection intact.
 
 - **Dimension stacking** (when [Stackable Planar Dimensions](https://www.curseforge.com/minecraft/mc-mods/stackable-planar-dimensions) or [Forgiving World](https://www.curseforge.com/minecraft/mc-mods/forgiving-world) is installed). Fly your airship down through the floor or up past the ceiling of a stacked dimension and the whole ship crosses into the adjoining dimension with everyone aboard, using the stack layout, heights, and coordinate scaling from that mod's config.
 
@@ -134,6 +136,10 @@ If an optional mod isn't installed, that integration is simply inactive: no erro
 | `teleport.portal_cooldown_ticks` | `200` | After teleporting, the ship is locked out of portals for this long (in ticks). Prevents a ship from immediately re-teleporting back through the destination portal. |
 | `teleport.dest_portal_search_radius` | `128` | How far AeroPortals looks for an existing matching portal at the destination before deciding to build a new one. |
 | `teleport.generate_matching_portal` | `true` | If `false`, the teleport aborts when no destination portal is found instead of building one. |
+| `teleport.onboard_portal_jumps` | `false` | Enable charged jumps from nether portals built on a ship. |
+| `teleport.onboard_generate_destination_portal` | `true` | Link or build a destination portal for onboard jumps. Disable for portal-free arrivals, regardless of `generate_matching_portal`. |
+| `teleport.onboard_jump_delay_ticks` | `100` | Charge time before an onboard jump. |
+| `teleport.clear_destination_blocks` | `false` | Destroy breakable landing obstructions after the ship group successfully loads. |
 | `teleport.clear_velocity_on_arrival` | `false` | If `true`, ships arrive from a teleport standing still. By default they keep their momentum. |
 | `safety.catch_falling_ships` | `true` | Catch an airship that falls out of the bottom of a dimension and set it down safely. Without this the physics engine destroys the ship and everything on board once it is far enough below the world, with no drops. |
 | `safety.catch_ships_below_floor` | `64` | How far below the bottom of a dimension a ship has to fall before it is caught. |
@@ -168,7 +174,10 @@ Portals added by other mods or by a single KubeJS script can be listed by their 
 
 ### Crash safety
 
-AeroPortals writes the ship snapshot to disk before moving it. If the server crashes mid-teleport, the ship is recovered on next startup instead of being lost.
+AeroPortals journals every ship in the travelling group and its captured attachments before removing any
+source ship. Recovery entries remain until destination saves and source removal are verified. An
+interrupted transfer is recovered on startup, normally by restoring the whole group at its source.
+Unreadable entries or missing compatibility mods leave the recovery data intact for a later retry.
 
 ## Known limitations
 
