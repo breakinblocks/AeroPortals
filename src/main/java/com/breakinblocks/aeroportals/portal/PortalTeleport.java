@@ -582,6 +582,14 @@ public final class PortalTeleport {
         executeChainMove(srcLevel, sub, dstLevel, dstWorld, validateLanding, contextLabel);
     }
 
+    public static List<ServerSubLevel> transferGroup(ServerLevel source, ServerSubLevel root) {
+        return List.copyOf(SimulatedRopeCompat.withRopePartners(source, SubLevelHelper.getLoadingDependencyChain(root)));
+    }
+
+    public static boolean teleportSpatial(ServerLevel source, ServerSubLevel sub, ServerLevel destination, Vec3 position, String label) {
+        return executeChainMove(source, sub, destination, position, false, label, true);
+    }
+
     private static boolean executeChainMove(
             ServerLevel srcLevel,
             ServerSubLevel sub,
@@ -589,19 +597,23 @@ public final class PortalTeleport {
             Vec3 dstWorld,
             boolean validateLanding,
             String contextLabel) {
+        return executeChainMove(srcLevel, sub, dstLevel, dstWorld, validateLanding, contextLabel, false);
+    }
+
+    private static boolean executeChainMove(ServerLevel srcLevel, ServerSubLevel sub, ServerLevel dstLevel,
+                                            Vec3 dstWorld, boolean validateLanding, String contextLabel,
+                                            boolean bypassPortalCooldown) {
         MinecraftServer server = srcLevel.getServer();
         Vec3 srcWorld = subWorldPos(sub.logicalPose());
 
         AabbUtil.ensureBoundsCurrent(sub);
-        Collection<ServerSubLevel> chainRaw = SimulatedRopeCompat.withRopePartners(
-                srcLevel, SubLevelHelper.getLoadingDependencyChain(sub));
+        Collection<ServerSubLevel> chainRaw = transferGroup(srcLevel, sub);
         long currentTick = server.getTickCount();
         List<ServerSubLevel> chain = new ArrayList<>(chainRaw.size());
         for (ServerSubLevel s : chainRaw) {
-            if (s.isRemoved()) continue;
-            if (PortalCooldown.isOnCooldown(s.getUniqueId(), currentTick)) {
-                AeroPortals.LOGGER.debug("[AeroPortals] chain member {} skipped (on cooldown)", s.getUniqueId());
-                continue;
+            if (s.isRemoved() || (!bypassPortalCooldown && PortalCooldown.isOnCooldown(s.getUniqueId(), currentTick))) {
+                AeroPortals.LOGGER.debug("[AeroPortals] group transfer rejected: member {} unavailable or on cooldown", s.getUniqueId());
+                return false;
             }
             chain.add(s);
         }
@@ -614,6 +626,8 @@ public final class PortalTeleport {
                     contextLabel, chain.size(),
                     chain.stream().map(s -> s.getUniqueId() + "@" + subWorldPos(s.logicalPose())).toList());
         }
+
+        if (!SableBridge.canMoveGroup(srcLevel, dstLevel, chain)) return false;
 
         SubLevelPreTransferEvent preEvent = new SubLevelPreTransferEvent(sub, srcLevel, dstLevel, chain, dstWorld, contextLabel);
         if (NeoForge.EVENT_BUS.post(preEvent).isCanceled()) {
@@ -693,15 +707,14 @@ public final class PortalTeleport {
             plans.add(new SubMovePlan(pm.sub, pm.srcPos, pm.dstPos, chainRiders, chainEntities));
         }
 
-        Map<SubMovePlan, SableBridge.Moved> moved = new IdentityHashMap<>();
-        for (SubMovePlan plan : plans) {
-            SableBridge.Moved move = SableBridge.moveAcrossDimensions(plan.srcSub, srcLevel, dstLevel, plan.dstPos);
-            if (move == null) {
-                AeroPortals.LOGGER.error("[AeroPortals] SableBridge returned null for chained sub {}; chain may be partially broken", plan.srcSub.getUniqueId());
-                continue;
-            }
-            moved.put(plan, move);
+        Map<UUID, SableBridge.Moved> results = SableBridge.moveGroup(srcLevel, dstLevel,
+                plans.stream().map(plan -> new SableBridge.Request(plan.srcSub, plan.dstPos)).toList());
+        if (results.size() != plans.size()) return false;
+        if (validateLanding && AeroPortalsConfig.CLEAR_DESTINATION_BLOCKS.get()) {
+            for (PendingMove pm : pending) clearLandingSpace(dstLevel, results.get(pm.sub.getUniqueId()).sub(), pm.dstPos, pm.dstPos);
         }
+        Map<SubMovePlan, SableBridge.Moved> moved = new IdentityHashMap<>();
+        for (SubMovePlan plan : plans) moved.put(plan, results.get(plan.srcSub.getUniqueId()));
 
         List<SubLevelTransferEvent.PlotMove> chainPlotMoves = new ArrayList<>(moved.size());
         for (SableBridge.Moved move : moved.values()) {
@@ -760,6 +773,7 @@ public final class PortalTeleport {
 
         AeroPortals.LOGGER.debug("[AeroPortals] {} teleport complete; moved {}/{} sub(s) from chain",
                 contextLabel, moved.size(), plans.size());
+        TeleportJournal.completeGroup(server, results.keySet(), srcLevel, dstLevel);
         return moved.size() == plans.size() && !moved.isEmpty();
     }
 

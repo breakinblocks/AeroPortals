@@ -20,6 +20,7 @@ import dev.ryanhcode.sable.util.SableNBTUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.DoubleTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
@@ -53,122 +54,234 @@ public final class SableBridge {
         }
     }
 
-    public static Moved moveAcrossDimensions(
-            ServerSubLevel src,
-            ServerLevel srcLevel,
-            ServerLevel dstLevel,
-            Vec3 dstWorldPos) {
+    public record Request(ServerSubLevel sub, Vec3 destination) {}
 
-        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
-        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
-        if (srcContainer == null || dstContainer == null) {
-            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: missing container src={} dst={}", srcContainer, dstContainer);
-            return null;
-        }
+    private record Prepared(Request request, CompoundTag source, SubLevelData destination,
+                            SourceInfo sourceInfo, Map<TransferCarrier<?>, Object> carriers,
+                            CreateContraptionCompat.KineticSnapshot kinetics, CompoundTag metadata) {}
 
-        BoundingBox3ic contentBounds = src.getPlot().getBoundingBox();
-        if (contentBounds != BoundingBox3i.EMPTY) {
-            int spanSections = srcLevel.getSectionIndex(contentBounds.maxY()) - srcLevel.getSectionIndex(contentBounds.minY()) + 1;
-            int dstSectionCount = dstLevel.getSectionsCount();
-            if (spanSections > dstSectionCount) {
-                AeroPortals.LOGGER.error("[AeroPortals] SableBridge: sub {} spans {} chunk sections but destination {} only has {}; aborting move so it can stay where it is",
-                        src.getUniqueId(), spanSections, dstLevel.dimension().location(), dstSectionCount);
-                return null;
-            }
-        }
-        if (srcContainer != dstContainer && findFreePlot(dstContainer, 0, 0) == null) {
-            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination container has no free plot; aborting move for sub {}", src.getUniqueId());
-            return null;
-        }
-
-        int regionBits = srcContainer.getLogPlotSize() + 4;
-        ChunkPos oldPlotPos = src.getPlot().plotPos;
-        BlockPos oldRegionMin = new BlockPos(oldPlotPos.x << regionBits, srcLevel.getMinBuildHeight(), oldPlotPos.z << regionBits);
-        int regionBlocks = 1 << regionBits;
-
-        Map<TransferCarrier<?>, Object> carried = captureCarriers(srcLevel, src);
-        CreateContraptionCompat.KineticSnapshot kinetics = CreateContraptionCompat.collectKinetics(srcLevel, src);
-
-        SubLevelData data = SubLevelSerializer.toData(src, List.of());
-        AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: snapshotted sub uuid={} bounds={}", data.uuid(), data.bounds());
-
-        CompoundTag tag = data.fullTag();
-        stripKineticState(tag.getCompound("plot"), kinetics.kineticPositions());
-        CompoundTag sourceSnapshot = tag.copy();
-
-        CompoundTag poseTag = tag.getCompound("pose");
-        Pose3d pose = SableNBTUtils.readPose3d(poseTag);
-        Vec3 srcWorldPos = new Vec3(pose.position().x(), pose.position().y(), pose.position().z());
-        pose.position().set(dstWorldPos.x, dstWorldPos.y, dstWorldPos.z);
-        tag.put("pose", SableNBTUtils.writePose3d(pose));
-
-        Vec3 worldTranslation = dstWorldPos.subtract(srcWorldPos);
-        if (tag.contains("world_bounds")) {
-            BoundingBox3d worldBounds = SableNBTUtils.readBoundingBox(tag.getCompound("world_bounds"));
-            worldBounds.move(worldTranslation.x, worldTranslation.y, worldTranslation.z);
-            tag.put("world_bounds", SableNBTUtils.writeBoundingBox(worldBounds));
-        }
-
-        if (!TeleportJournal.write(
-                srcLevel.getServer(), data.uuid(),
-                srcLevel.dimension().location(), dstLevel.dimension().location(),
-                srcLevel.getMinBuildHeight(), data)) {
-            replayCarriers(srcLevel, src, carried, BlockPos.ZERO);
-            return null;
-        }
-
-        srcContainer.removeSubLevel(src, SubLevelRemovalReason.REMOVED);
-        AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: removed source sub-level");
-
-        SourceInfo sourceInfo = new SourceInfo(srcLevel.dimension(), srcLevel.getMinBuildHeight(),
-                worldTranslation, oldRegionMin, regionBlocks);
-
-        Loaded loaded;
-        try {
-            loaded = reloadInDestination(sourceInfo, dstLevel, dstContainer, data);
-        } catch (RuntimeException e) {
-            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination load threw for sub {}; will restore to source", data.uuid(), e);
-            loaded = null;
-        }
-
-        if (loaded != null) {
-            AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: loaded into {} at {}",
-                    dstLevel.dimension().location(), loaded.sub().logicalPose().position());
-            replayCarriers(dstLevel, loaded.sub(), carried, loaded.shift());
-            CreateContraptionCompat.reactivateGenerators(dstLevel, kinetics.generatorPositions(), loaded.shift());
-            TeleportJournal.delete(srcLevel.getServer(), data.uuid());
-            return new Moved(loaded.sub(), loaded.shift(), oldRegionMin, regionBlocks);
-        }
-
-        if (restoreToSource(srcLevel, srcContainer, sourceSnapshot, data.uuid(), oldRegionMin, regionBlocks, carried, kinetics)) {
-            TeleportJournal.delete(srcLevel.getServer(), data.uuid());
-        } else {
-            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: destination load AND source restore failed for sub {}; left in journal for recovery on next start", data.uuid());
-        }
-        return null;
+    public static Moved moveAcrossDimensions(ServerSubLevel sub, ServerLevel source, ServerLevel destination, Vec3 position) {
+        Map<UUID, Moved> moved = moveGroup(source, destination, List.of(new Request(sub, position)));
+        if (moved.isEmpty()) return null;
+        TeleportJournal.completeGroup(source.getServer(), moved.keySet(), source, destination);
+        return moved.get(sub.getUniqueId());
     }
 
-    private static boolean restoreToSource(ServerLevel srcLevel, ServerSubLevelContainer srcContainer, CompoundTag sourceSnapshot, UUID uuid,
-                                           BlockPos oldRegionMin, int regionBlocks,
-                                           Map<TransferCarrier<?>, Object> carried,
-                                           CreateContraptionCompat.KineticSnapshot kinetics) {
-        SubLevelData restoreData = SubLevelSerializer.fromData(sourceSnapshot);
-        if (restoreData == null) return false;
-        SourceInfo sourceInfo = new SourceInfo(srcLevel.dimension(), srcLevel.getMinBuildHeight(),
-                Vec3.ZERO, oldRegionMin, regionBlocks);
-        Loaded restored;
+    public static boolean canMoveGroup(ServerLevel source, ServerLevel destination, List<ServerSubLevel> group) {
+        ServerSubLevelContainer src = SubLevelContainer.getContainer(source);
+        ServerSubLevelContainer dst = SubLevelContainer.getContainer(destination);
+        if (src == null || dst == null || group.isEmpty()) return false;
+        if (group.stream().map(ServerSubLevel::getUniqueId).distinct().count() != group.size()) return false;
+        int capacity = 1 << (dst.getLogSideLength() * 2);
+        int available = capacity - dst.getOccupancy().cardinality() + (src == dst ? group.size() : 0);
+        if (available < group.size()) return false;
+        for (ServerSubLevel sub : group) {
+            if (sub.isRemoved() || src.getSubLevel(sub.getUniqueId()) != sub) return false;
+            BoundingBox3ic bounds = sub.getPlot().getBoundingBox();
+            if (bounds != BoundingBox3i.EMPTY && source.getSectionIndex(bounds.maxY())
+                    - source.getSectionIndex(bounds.minY()) + 1 > destination.getSectionsCount()) return false;
+        }
         try {
-            restored = reloadInDestination(sourceInfo, srcLevel, srcContainer, restoreData);
-        } catch (RuntimeException e) {
-            AeroPortals.LOGGER.error("[AeroPortals] SableBridge: source restore threw for sub {}", uuid, e);
+            for (TransferCarrier<?> carrier : AeroPortalsApi.carriers()) carrier.validateGroup(source, group, destination);
+        } catch (RuntimeException ex) {
+            AeroPortals.LOGGER.warn("[AeroPortals] transfer group rejected: {}", ex.getMessage());
             return false;
         }
-        if (restored == null) return false;
-        replayCarriers(srcLevel, restored.sub(), carried, restored.shift());
-        CreateContraptionCompat.reactivateGenerators(srcLevel, kinetics.generatorPositions(), restored.shift());
-        AeroPortals.LOGGER.warn("[AeroPortals] SableBridge: destination load failed; restored sub {} to source {} (teleport cancelled)",
-                uuid, srcLevel.dimension().location());
         return true;
+    }
+
+    /** The server thread reserves the whole group by completing preflight before any mutation. */
+    public static Map<UUID, Moved> moveGroup(ServerLevel source, ServerLevel destination, List<Request> requests) {
+        List<ServerSubLevel> group = requests.stream().map(Request::sub).toList();
+        if (!canMoveGroup(source, destination, group)) return Map.of();
+        ServerSubLevelContainer src = SubLevelContainer.getContainer(source);
+        ServerSubLevelContainer dst = SubLevelContainer.getContainer(destination);
+        List<UUID> ids = group.stream().map(ServerSubLevel::getUniqueId).toList();
+        List<Prepared> prepared = new ArrayList<>();
+        Map<UUID, Moved> moved = new LinkedHashMap<>();
+        Set<UUID> journalsWritten = new java.util.HashSet<>();
+        boolean removed = false;
+        boolean preparationRollbackComplete = true;
+        try {
+            for (Request request : requests) {
+                ServerSubLevel sub = request.sub();
+                int regionBits = src.getLogPlotSize() + 4;
+                BlockPos region = new BlockPos(sub.getPlot().plotPos.x << regionBits,
+                        source.getMinBuildHeight(), sub.getPlot().plotPos.z << regionBits);
+                Map<TransferCarrier<?>, Object> carried = captureCarriers(source, sub);
+                try {
+                    CreateContraptionCompat.KineticSnapshot kinetics = CreateContraptionCompat.collectKinetics(source, sub);
+                    SubLevelData data = SubLevelSerializer.toData(sub, ids);
+                    CompoundTag tag = data.fullTag();
+                    stripKineticState(tag.getCompound("plot"), kinetics.kineticPositions());
+                    CompoundTag original = tag.copy();
+                    Pose3d pose = SableNBTUtils.readPose3d(tag.getCompound("pose"));
+                    Vec3 translation = request.destination().subtract(new Vec3(pose.position().x(), pose.position().y(), pose.position().z()));
+                    pose.position().set(request.destination().x, request.destination().y, request.destination().z);
+                    tag.put("pose", SableNBTUtils.writePose3d(pose));
+                    if (tag.contains("world_bounds")) {
+                        BoundingBox3d bounds = SableNBTUtils.readBoundingBox(tag.getCompound("world_bounds"));
+                        bounds.move(translation.x, translation.y, translation.z);
+                        tag.put("world_bounds", SableNBTUtils.writeBoundingBox(bounds));
+                    }
+                    CompoundTag metadata = new CompoundTag();
+                    metadata.put("source_snapshot", original.copy());
+                    metadata.put("carriers", serializeCarriers(carried));
+                    metadata.putLong("old_region_min", region.asLong());
+                    metadata.putInt("region_blocks", 1 << regionBits);
+                    metadata.putLongArray("generator_positions", kinetics.generatorPositions().stream().mapToLong(Long::longValue).toArray());
+                    ListTag worldTranslation = new ListTag();
+                    worldTranslation.add(DoubleTag.valueOf(translation.x));
+                    worldTranslation.add(DoubleTag.valueOf(translation.y));
+                    worldTranslation.add(DoubleTag.valueOf(translation.z));
+                    metadata.put("world_translation", worldTranslation);
+                    metadata.putUUID("group_id", ids.getFirst());
+                    ListTag members = new ListTag();
+                    for (UUID id : ids) { CompoundTag member = new CompoundTag(); member.putUUID("uuid", id); members.add(member); }
+                    metadata.put("group_members", members);
+                    prepared.add(new Prepared(request, original, data,
+                            new SourceInfo(source.dimension(), source.getMinBuildHeight(), translation, region, 1 << regionBits),
+                            carried, kinetics, metadata));
+                } catch (RuntimeException ex) {
+                    preparationRollbackComplete = replayCarriersBestEffort(source, sub, carried, BlockPos.ZERO);
+                    throw ex;
+                }
+            }
+            for (Prepared item : prepared) {
+                UUID uuid = item.request().sub().getUniqueId();
+                if (!TeleportJournal.write(source.getServer(), uuid,
+                        source.dimension().location(), destination.dimension().location(), source.getMinBuildHeight(),
+                        item.destination(), item.metadata())) throw new IllegalStateException("Recovery journal could not be written");
+                journalsWritten.add(uuid);
+            }
+            removed = true;
+            for (ServerSubLevel sub : group) src.removeSubLevel(sub, SubLevelRemovalReason.REMOVED);
+            for (Prepared item : prepared) {
+                Loaded loaded = reloadInDestination(item.sourceInfo(), destination, dst, item.destination());
+                if (loaded == null) throw new IllegalStateException("Destination rejected " + item.destination().uuid());
+                moved.put(item.destination().uuid(), new Moved(loaded.sub(), loaded.shift(), item.sourceInfo().regionMin(), item.sourceInfo().regionBlocks()));
+            }
+            // Every endpoint exists before any carrier reconnects a multi-ship network.
+            for (Prepared item : prepared) {
+                Moved result = moved.get(item.destination().uuid());
+                replayCarriers(destination, result.sub(), item.carriers(), result.shift());
+                CreateContraptionCompat.reactivateGenerators(destination, item.kinetics().generatorPositions(), result.shift());
+            }
+            return moved;
+        } catch (RuntimeException ex) {
+            AeroPortals.LOGGER.error("[AeroPortals] group transfer failed; restoring all source ships", ex);
+            boolean rollbackComplete = preparationRollbackComplete
+                    && (!(ex instanceof CarrierCaptureException captureFailure) || captureFailure.restored);
+            if (!removed) {
+                for (Prepared item : prepared) {
+                    rollbackComplete &= replayCarriersBestEffort(source, item.request().sub(), item.carriers(), BlockPos.ZERO);
+                }
+                if (rollbackComplete) {
+                    // A refused write can mean this ship has an older recovery transaction.
+                    // Only this attempt's successful writes belong to its cancellation cleanup.
+                    for (UUID uuid : journalsWritten) TeleportJournal.delete(source.getServer(), uuid);
+                } else {
+                    AeroPortals.LOGGER.error("[AeroPortals] source carrier rollback incomplete; retaining available group journals for recovery");
+                }
+                return Map.of();
+            }
+            List<ServerSubLevel> partialDestination = new ArrayList<>();
+            for (UUID id : ids) {
+                ServerSubLevel loaded = (ServerSubLevel) dst.getSubLevel(id);
+                if (loaded != null && !loaded.isRemoved() && loaded != group.stream().filter(g -> g.getUniqueId().equals(id)).findFirst().orElse(null)) {
+                    partialDestination.add(loaded);
+                }
+            }
+            // Networks may refer to every member. Discard replayed entities/glue while all
+            // destination endpoints still exist, then remove every partial load independently.
+            for (ServerSubLevel loaded : partialDestination) {
+                rollbackComplete &= discardCarriersBestEffort(destination, loaded);
+            }
+            for (ServerSubLevel loaded : partialDestination) {
+                try {
+                    dst.removeSubLevel(loaded, SubLevelRemovalReason.REMOVED);
+                } catch (RuntimeException cleanupError) {
+                    rollbackComplete = false;
+                    AeroPortals.LOGGER.error("[AeroPortals] could not remove partial destination ship {}; continuing group rollback",
+                            loaded.getUniqueId(), cleanupError);
+                }
+            }
+            Map<UUID, Loaded> restored = new LinkedHashMap<>();
+            for (Prepared item : prepared) {
+                ServerSubLevel original = item.request().sub();
+                if (!original.isRemoved() && src.getSubLevel(original.getUniqueId()) == original) {
+                    restored.put(original.getUniqueId(), new Loaded(original, BlockPos.ZERO));
+                    continue;
+                }
+                try {
+                    if (src.getSubLevel(original.getUniqueId()) != null) {
+                        throw new IllegalStateException("A partial destination with this UUID still occupies the source container");
+                    }
+                    Loaded result = reloadInDestination(new SourceInfo(source.dimension(), source.getMinBuildHeight(), Vec3.ZERO,
+                            item.sourceInfo().regionMin(), item.sourceInfo().regionBlocks()), source, src,
+                            SubLevelSerializer.fromData(item.source().copy()));
+                    if (result == null) throw new IllegalStateException("Source rejected the saved ship");
+                    restored.put(original.getUniqueId(), result);
+                } catch (RuntimeException restoreError) {
+                    rollbackComplete = false;
+                    AeroPortals.LOGGER.error("[AeroPortals] could not restore source ship {}; continuing other group members",
+                            original.getUniqueId(), restoreError);
+                }
+            }
+            for (Prepared item : prepared) {
+                Loaded result = restored.get(item.destination().uuid());
+                if (result == null) continue;
+                rollbackComplete &= replayCarriersBestEffort(source, result.sub(), item.carriers(), result.shift());
+                try {
+                    CreateContraptionCompat.reactivateGenerators(source, item.kinetics().generatorPositions(), result.shift());
+                } catch (RuntimeException kineticError) {
+                    rollbackComplete = false;
+                    AeroPortals.LOGGER.error("[AeroPortals] could not reactivate restored generators for {}", result.sub().getUniqueId(), kineticError);
+                }
+            }
+            if (rollbackComplete) {
+                try {
+                    TeleportJournal.rollbackGroup(source.getServer(), ids, source, destination);
+                } catch (RuntimeException saveError) {
+                    AeroPortals.LOGGER.error("[AeroPortals] could not durably finish group rollback; retaining journals", saveError);
+                }
+            } else {
+                AeroPortals.LOGGER.error("[AeroPortals] group rollback incomplete; retaining all journals for recovery");
+            }
+            return Map.of();
+        }
+    }
+
+    private static CompoundTag serializeCarriers(Map<TransferCarrier<?>, Object> carried) {
+        CompoundTag tags = new CompoundTag();
+        carried.forEach((carrier, value) -> tags.put(carrier.id().toString(), serializeCarrier(carrier, value)));
+        return tags;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> CompoundTag serializeCarrier(TransferCarrier<T> carrier, Object value) {
+        return carrier.serialize((T) value);
+    }
+
+    public static boolean replayJournalCarriers(ServerLevel level, ServerSubLevel sub, CompoundTag metadata, BlockPos shift) {
+        CompoundTag tags = metadata.getCompound("carriers");
+        Map<TransferCarrier<?>, Object> carried = new LinkedHashMap<>();
+        try {
+            for (String id : tags.getAllKeys()) {
+                TransferCarrier<?> carrier = AeroPortalsApi.carriers().stream()
+                        .filter(candidate -> candidate.id().toString().equals(id)).findFirst()
+                        .orElseThrow(() -> new IllegalStateException("Missing recovery carrier " + id));
+                carried.put(carrier, carrier.deserialize(tags.getCompound(id)));
+            }
+            replayCarriers(level, sub, carried, shift);
+            Set<Long> generators = new java.util.HashSet<>();
+            for (long position : metadata.getLongArray("generator_positions")) generators.add(position);
+            CreateContraptionCompat.reactivateGenerators(level, generators, shift);
+            return true;
+        } catch (RuntimeException ex) {
+            AeroPortals.LOGGER.error("[AeroPortals] carrier recovery failed for {}", sub.getUniqueId(), ex);
+            return false;
+        }
     }
 
     private static Map<TransferCarrier<?>, Object> captureCarriers(ServerLevel srcLevel, ServerSubLevel sub) {
@@ -180,11 +293,51 @@ public final class SableBridge {
                 Object value = carrier.capture(srcLevel, sub);
                 if (value != null) captured.put(carrier, value);
             } catch (RuntimeException e) {
-                AeroPortals.LOGGER.error("[AeroPortals] transfer carrier {} threw during capture of sub {}",
-                        carrier.id(), sub.getUniqueId(), e);
+                boolean restored = replayCarriersBestEffort(srcLevel, sub, captured, BlockPos.ZERO);
+                throw new CarrierCaptureException(carrier.id().toString(), e, restored);
             }
         }
         return captured;
+    }
+
+    private static final class CarrierCaptureException extends IllegalStateException {
+        private final boolean restored;
+
+        private CarrierCaptureException(String carrier, RuntimeException cause, boolean restored) {
+            super("Transfer carrier capture failed: " + carrier, cause);
+            this.restored = restored;
+        }
+    }
+
+    private static boolean discardCarriersBestEffort(ServerLevel level, ServerSubLevel sub) {
+        boolean complete = true;
+        for (TransferCarrier<?> carrier : AeroPortalsApi.carriers()) {
+            try {
+                carrier.discard(level, sub);
+            } catch (RuntimeException ex) {
+                complete = false;
+                AeroPortals.LOGGER.error("[AeroPortals] could not discard destination carrier {} for {}; continuing cleanup",
+                        carrier.id(), sub.getUniqueId(), ex);
+            }
+        }
+        return complete;
+    }
+
+    private static boolean replayCarriersBestEffort(ServerLevel level, ServerSubLevel sub,
+                                                   Map<TransferCarrier<?>, Object> captured, BlockPos shift) {
+        boolean complete = true;
+        List<Map.Entry<TransferCarrier<?>, Object>> entries = new ArrayList<>(captured.entrySet());
+        Collections.reverse(entries);
+        for (Map.Entry<TransferCarrier<?>, Object> entry : entries) {
+            try {
+                replayOne(entry.getKey(), level, sub, entry.getValue(), shift);
+            } catch (RuntimeException ex) {
+                complete = false;
+                AeroPortals.LOGGER.error("[AeroPortals] could not replay source carrier {} for {}; continuing rollback",
+                        entry.getKey().id(), sub.getUniqueId(), ex);
+            }
+        }
+        return complete;
     }
 
     private static void replayCarriers(ServerLevel level, ServerSubLevel newSub, Map<TransferCarrier<?>, Object> captured, BlockPos shift) {
@@ -195,8 +348,7 @@ public final class SableBridge {
             try {
                 replayOne(entry.getKey(), level, newSub, entry.getValue(), shift);
             } catch (RuntimeException e) {
-                AeroPortals.LOGGER.error("[AeroPortals] transfer carrier {} threw during replay on sub {}",
-                        entry.getKey().id(), newSub.getUniqueId(), e);
+                throw new IllegalStateException("Transfer carrier replay failed: " + entry.getKey().id(), e);
             }
         }
     }
