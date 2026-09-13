@@ -186,4 +186,4 @@ AeroPortals fires `SubLevelTransferEvent` on the NeoForge event bus after each t
 
 ## License
 
-MIT, see [LICENSE.md](LICENSE.md).
+PolyForm Shield License 1.0.0 AND PolyForm Perimeter License 1.0.0. Use must comply with both; see [LICENSE.md](LICENSE.md).

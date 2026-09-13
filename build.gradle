@@ -206,6 +206,10 @@ tasks.withType(JavaCompile).configureEach {
 	options.compilerArgs << '-Xlint:deprecation'
 }
 
+tasks.withType(Jar).configureEach {
+	from('LICENSE.md')
+}
+
 tasks.register('copyGameTestStructures', Copy) {
 	from "src/main/resources/data/${mod_id}/gametest/structures"
 	into "run-gametest/gameteststructures"
