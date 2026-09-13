@@ -76,7 +76,6 @@ public final class PortalTeleport {
     private static final double MAX_RIDER_OFFSET_SQR = 1024.0 * 1024.0;
     private static final double RIDER_REACQUIRE_MARGIN = 1.0;
 
-    public static final ConcurrentHashMap<UUID, Entity> lastMovedEntities = new ConcurrentHashMap<>();
 
     private PortalTeleport() {}
 
@@ -1208,7 +1207,6 @@ public final class PortalTeleport {
             Entity newEntity = e.changeDimension(transition);
             if (newEntity != null) {
                 newEntity.fallDistance = 0.0f;
-                lastMovedEntities.put(b.entityUuid(), newEntity);
                 AeroPortals.LOGGER.debug("[AeroPortals] moved entity {} ({}) -> {} yaw={}",
                         newEntity.getType(), b.entityUuid(), worldFinal, yaw);
             } else {

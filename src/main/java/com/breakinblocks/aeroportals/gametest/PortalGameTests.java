@@ -549,7 +549,7 @@ public class PortalGameTests {
                 .thenIdle(3)
                 .thenExecute(() -> PortalDetector.scan(srcLevel))
                 .thenExecute(() -> {
-                    Entity moved = PortalTeleport.lastMovedEntities.get(cowUuidRef[0]);
+                    Entity moved = helper.getLevel().getServer().getLevel(Level.NETHER).getEntity(cowUuidRef[0]);
                     boolean cancelled = VanillaPortalCanceller.cancelledFor.contains(cowUuidRef[0]);
                     AeroPortals.LOGGER.info("[AeroPortals/test] cow: moved-by-us={} cancelled-by-us={}", moved, cancelled);
 
@@ -602,7 +602,7 @@ public class PortalGameTests {
                 .thenExecute(() -> PortalDetector.scan(srcLevel))
                 .thenExecute(() -> {
                     boolean wasCancelled = VanillaPortalCanceller.cancelledFor.contains(standUuidRef[0]);
-                    Entity moved = PortalTeleport.lastMovedEntities.get(standUuidRef[0]);
+                    Entity moved = helper.getLevel().getServer().getLevel(Level.NETHER).getEntity(standUuidRef[0]);
                     AeroPortals.LOGGER.info("[AeroPortals/test] race-suppress: wasCancelled={} moved={}",
                             wasCancelled, moved);
 
@@ -2274,7 +2274,7 @@ public class PortalGameTests {
                 .thenExecute(() -> {
                     PortalDetector.scan(srcLevel);
 
-                    Entity moved = PortalTeleport.lastMovedEntities.get(frameUuidRef[0]);
+                    Entity moved = helper.getLevel().getServer().getLevel(Level.NETHER).getEntity(frameUuidRef[0]);
                     AeroPortals.LOGGER.info("[AeroPortals/test] item frame: lookupUuid={} srcRemoved={} movedRef={}",
                             frameUuidRef[0],
                             srcLevel.getEntity(frameUuidRef[0]) == null, moved);

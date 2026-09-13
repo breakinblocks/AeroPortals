@@ -3,7 +3,6 @@ package com.breakinblocks.aeroportals.compat;
 import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.api.AeroPortalsApi;
 import com.breakinblocks.aeroportals.api.TransferCarrier;
-import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import net.minecraft.core.BlockPos;
@@ -74,7 +73,6 @@ public final class BuiltinCarriers {
                     AeroPortals.LOGGER.warn("[AeroPortals] wall entity {} was rejected by the destination level", restored.getType());
                     continue;
                 }
-                PortalTeleport.lastMovedEntities.put(restored.getUUID(), restored);
             }
             AeroPortals.LOGGER.debug("[AeroPortals] replayed {} wall entity/entities post-teleport (shift {})",
                     captured.size(), plotShift);
