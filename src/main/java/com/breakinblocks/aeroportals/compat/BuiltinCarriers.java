@@ -65,17 +65,27 @@ public final class BuiltinCarriers {
         @Override
         public void replay(ServerLevel dstLevel, ServerSubLevel newSub, List<CompoundTag> captured, BlockPos plotShift) {
             for (CompoundTag saved : captured) {
-                if (saved.hasUUID("UUID") && dstLevel.getEntity(saved.getUUID("UUID")) != null) continue;
+                if (!saved.hasUUID("UUID")) throw new IllegalStateException("Wall entity recovery payload has no UUID");
+                ListTag position = saved.getList("Pos", Tag.TAG_DOUBLE);
+                if (position.size() != 3 || !Double.isFinite(position.getDouble(0))
+                        || !Double.isFinite(position.getDouble(1)) || !Double.isFinite(position.getDouble(2))) {
+                    throw new IllegalStateException("Wall entity recovery payload has an invalid position: " + saved.getUUID("UUID"));
+                }
+                Entity existing = dstLevel.getEntity(saved.getUUID("UUID"));
+                if (existing != null) {
+                    if (existing.isRemoved() || !EntityType.getKey(existing.getType()).toString().equals(saved.getString("id"))) {
+                        throw new IllegalStateException("Wall entity recovery UUID conflicts with an existing entity: " + saved.getUUID("UUID"));
+                    }
+                    continue;
+                }
                 CompoundTag tag = saved.copy();
                 shift(tag, plotShift);
                 Entity restored = EntityType.loadEntityRecursive(tag, dstLevel, e -> e);
                 if (restored == null) {
-                    AeroPortals.LOGGER.warn("[AeroPortals] wall entity {} could not be recreated after the move", tag.getString("id"));
-                    continue;
+                    throw new IllegalStateException("Wall entity could not be recreated after the move: " + tag.getString("id"));
                 }
                 if (!dstLevel.addFreshEntity(restored)) {
-                    AeroPortals.LOGGER.warn("[AeroPortals] wall entity {} was rejected by the destination level", restored.getType());
-                    continue;
+                    throw new IllegalStateException("Destination rejected wall entity " + restored.getUUID());
                 }
             }
             AeroPortals.LOGGER.debug("[AeroPortals] replayed {} wall entity/entities post-teleport (shift {})",
