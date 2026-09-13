@@ -91,7 +91,7 @@ public final class SimulatedSwivelFixup {
                 Method getPlate = cls.getMethod("getPlatePos");
                 Method setPlate = cls.getMethod("setPlatePos", BlockPos.class);
                 Method getSubId = cls.getMethod("getSubLevelID");
-                Method reattach = cls.getMethod("reattachConstraint", SubLevel.class, boolean.class);
+                Method reattach = cls.getMethod("reattachConstraint", ServerSubLevel.class, boolean.class);
                 getPlatePos = getPlate;
                 setPlatePos = setPlate;
                 getSubLevelID = getSubId;
