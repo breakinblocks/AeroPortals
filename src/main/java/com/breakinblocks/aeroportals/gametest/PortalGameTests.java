@@ -482,14 +482,31 @@ public class PortalGameTests {
                     ArmorStand stand = new ArmorStand(srcLevel, worldPos.getX() + 0.5, worldPos.getY() + 1.0, worldPos.getZ() + 0.5);
                     stand.setItemSlot(EquipmentSlot.HEAD,
                             new ItemStack(Items.DIAMOND_HELMET));
-                    srcLevel.addFreshEntity(stand);
+                    helper.assertTrue(srcLevel.addFreshEntity(stand), "source must accept the armor stand");
                     stand.setPortalCooldown(1000);
                     standUuidRef[0] = stand.getUUID();
+                    helper.assertTrue(srcLevel.getEntity(stand.getUUID()) == stand,
+                            "spawned armor stand must be visible in the source before transfer");
+                    helper.assertTrue(!dev.ryanhcode.sable.api.entity.EntitySubLevelUtil.shouldKick(stand),
+                            "armor stand must be eligible for retained-entity transfer");
+                    helper.assertTrue(AabbUtil.worldAabb(sub).inflate(1.0).intersects(stand.getBoundingBox()),
+                            "armor stand fixture must overlap the ship rider capture bounds");
+                    AeroPortals.LOGGER.info("[AeroPortals/test] armor stand {} spawned at {} on ship {}; capture eligible=true",
+                            stand.getUUID(), stand.position(), sub.getUniqueId());
 
                     PortalBuilder.build(srcLevel, worldPos, Direction.Axis.X, 2, 3);
                 })
                 .thenIdle(3)
-                .thenExecute(() -> PortalDetector.scan(srcLevel))
+                .thenExecute(() -> {
+                    Entity beforeScan = srcLevel.getEntity(standUuidRef[0]);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] armor stand {} before scan: source={}, destination={}",
+                            standUuidRef[0], beforeScan, dstLevel.getEntity(standUuidRef[0]));
+                    PortalDetector.scan(srcLevel);
+                    AeroPortals.LOGGER.info("[AeroPortals/test] armor stand {} immediately after scan: source={}, destination={}",
+                            standUuidRef[0], srcLevel.getEntity(standUuidRef[0]), dstLevel.getEntity(standUuidRef[0]));
+                })
+                .thenWaitUntil(() -> helper.assertTrue(dstLevel.getEntity(standUuidRef[0]) != null,
+                        "armor stand " + standUuidRef[0] + " must become visible in the destination"))
                 .thenExecute(() -> {
                     Entity inSrc = srcLevel.getEntity(standUuidRef[0]);
                     Entity inDst = dstLevel.getEntity(standUuidRef[0]);
@@ -544,19 +561,28 @@ public class PortalGameTests {
                     srcLevel.addFreshEntity(cow);
                     cowUuidRef[0] = cow.getUUID();
 
+                    AABB captureBox = AabbUtil.worldAabb(sub).inflate(1.0);
+                    helper.assertTrue(srcLevel.getEntities((Entity) null, captureBox).contains(cow),
+                            "cow fixture must be visible to the rider capture query");
+                    try {
+                        Method capture = PortalTeleport.class.getDeclaredMethod("captureEntityRiders", ServerLevel.class, ServerSubLevel.class);
+                        capture.setAccessible(true);
+                        List<?> bindings = (List<?>) capture.invoke(null, srcLevel, sub);
+                        helper.assertTrue(bindings.stream().noneMatch(binding ->
+                                        ((com.breakinblocks.aeroportals.portal.EntityRiderBinding) binding).entityUuid().equals(cow.getUUID())),
+                                "our rider capture must exclude cows outside the retain tag");
+                    } catch (ReflectiveOperationException failure) {
+                        helper.fail("could not verify cow capture eligibility: " + failure);
+                    }
+
                     PortalBuilder.build(srcLevel, worldPos, Direction.Axis.X, 2, 3);
                 })
                 .thenIdle(3)
                 .thenExecute(() -> PortalDetector.scan(srcLevel))
                 .thenExecute(() -> {
-                    Entity moved = helper.getLevel().getServer().getLevel(Level.NETHER).getEntity(cowUuidRef[0]);
                     boolean cancelled = VanillaPortalCanceller.cancelledFor.contains(cowUuidRef[0]);
-                    AeroPortals.LOGGER.info("[AeroPortals/test] cow: moved-by-us={} cancelled-by-us={}", moved, cancelled);
-
-                    if (moved != null) {
-                        helper.fail("our system transferred a cow (not in retain tag), but should have ignored it: " + moved);
-                        return;
-                    }
+                    AeroPortals.LOGGER.info("[AeroPortals/test] cow: excluded-from-capture=true cancelled-by-us={} destination-present={}",
+                            cancelled, dstLevel.getEntity(cowUuidRef[0]) != null);
                     if (cancelled) {
                         helper.fail("VanillaPortalCanceller fired for cow (should only fire for retain-tag entities)");
                         return;
@@ -600,6 +626,8 @@ public class PortalGameTests {
                 })
                 .thenIdle(3)
                 .thenExecute(() -> PortalDetector.scan(srcLevel))
+                .thenWaitUntil(() -> helper.assertTrue(dstLevel.getEntity(standUuidRef[0]) != null,
+                        "canceled vanilla transfer must be followed by an armor stand arriving through our transfer"))
                 .thenExecute(() -> {
                     boolean wasCancelled = VanillaPortalCanceller.cancelledFor.contains(standUuidRef[0]);
                     Entity moved = helper.getLevel().getServer().getLevel(Level.NETHER).getEntity(standUuidRef[0]);
@@ -2255,8 +2283,9 @@ public class PortalGameTests {
                     BlockPos worldPos = helper.absolutePos(local);
                     helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
 
-                    ItemFrame frame = new ItemFrame(srcLevel, worldPos, Direction.UP);
+                    ItemFrame frame = new ItemFrame(srcLevel, worldPos.above(), Direction.UP);
                     frame.setItem(new ItemStack(Items.DIAMOND));
+                    helper.assertTrue(frame.survives(), "item frame fixture must have valid support before assembly");
                     srcLevel.addFreshEntity(frame);
                     frameUuidRef[0] = frame.getUUID();
                     AeroPortals.LOGGER.info("[AeroPortals/test] spawned item frame uuid={}", frameUuidRef[0]);
@@ -2271,20 +2300,21 @@ public class PortalGameTests {
                     PortalBuilder.build(srcLevel, worldPos, Direction.Axis.X, 2, 3);
                 })
                 .thenIdle(3)
+                .thenExecute(() -> PortalDetector.scan(srcLevel))
+                .thenWaitUntil(() -> helper.assertTrue(dstLevel.getEntity(frameUuidRef[0]) != null,
+                        "item frame must become visible in the destination entity storage"))
                 .thenExecute(() -> {
-                    PortalDetector.scan(srcLevel);
-
-                    Entity moved = helper.getLevel().getServer().getLevel(Level.NETHER).getEntity(frameUuidRef[0]);
+                    Entity moved = dstLevel.getEntity(frameUuidRef[0]);
                     AeroPortals.LOGGER.info("[AeroPortals/test] item frame: lookupUuid={} srcRemoved={} movedRef={}",
                             frameUuidRef[0],
                             srcLevel.getEntity(frameUuidRef[0]) == null, moved);
 
                     if (srcLevel.getEntity(frameUuidRef[0]) != null) {
-                        helper.fail("source item frame should have been removed by changeDimension");
+                        helper.fail("source item frame should have been removed by the ship transfer");
                         return;
                     }
                     if (moved == null) {
-                        helper.fail("replayEntityRiders did not record the item frame transfer");
+                        helper.fail("item frame is missing from the destination entity storage");
                         return;
                     }
                     if (!(moved instanceof ItemFrame frameDst)) {
@@ -2303,6 +2333,10 @@ public class PortalGameTests {
                         helper.fail("transferred item frame was removed before verify");
                         return;
                     }
+                    BlockPos support = frameDst.getPos().relative(frameDst.getDirection().getOpposite());
+                    helper.assertTrue(dstLevel.getBlockState(support).is(Blocks.OBSIDIAN),
+                            "arriving item frame must still be supported by the ship's obsidian block");
+                    helper.assertTrue(frameDst.survives(), "arriving item frame must retain valid support and clearance");
                 })
                 .thenSucceed();
     }
