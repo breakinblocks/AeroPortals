@@ -1,6 +1,7 @@
 package com.breakinblocks.aeroportals.events;
 
 import com.breakinblocks.aeroportals.AeroPortals;
+import com.breakinblocks.aeroportals.portal.TransferTravelScope;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import com.breakinblocks.aeroportals.util.PortalBlockSearch;
 import dev.ryanhcode.sable.Sable;
@@ -32,6 +33,7 @@ public final class VanillaPortalCanceller {
     public static void onEntityTravelToDimension(EntityTravelToDimensionEvent event) {
         if (!AeroPortals.sableLoaded) return;
         Entity entity = event.getEntity();
+        if (TransferTravelScope.isAllowed(entity)) return;
         if (!(entity.level() instanceof ServerLevel srcLevel)) return;
         AabbUtil.ensureBoundsCurrent(srcLevel);
 
@@ -66,7 +68,7 @@ public final class VanillaPortalCanceller {
 
     private static SubLevel aboardSubLevel(ServerLevel level, ServerPlayer player) {
         SubLevel tracking = Sable.HELPER.getTrackingSubLevel(player);
-        if (tracking != null) return tracking;
+        if (tracking != null && !tracking.isRemoved()) return tracking;
         if (SubLevelContainer.getContainer(level) == null) return null;
         SubLevel last = Sable.HELPER.getLastTrackingSubLevel(player);
         if (last == null || last.isRemoved()) return null;

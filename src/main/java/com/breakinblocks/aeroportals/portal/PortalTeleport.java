@@ -726,8 +726,13 @@ public final class PortalTeleport {
                 }
                 Vec3 worldFinal = newSubPos.add(rb.localOffset());
                 float yaw = rb.yawDelta() + newYawBase;
-                p.teleportTo(dstLevel, worldFinal.x, worldFinal.y, worldFinal.z,
-                        Collections.<RelativeMovement>emptySet(), yaw, rb.pitch());
+                TransferTravelScope.allow(p, () -> p.teleportTo(dstLevel, worldFinal.x, worldFinal.y, worldFinal.z,
+                        Collections.<RelativeMovement>emptySet(), yaw, rb.pitch()));
+                if (p.serverLevel() != dstLevel) {
+                    AeroPortals.LOGGER.warn("[AeroPortals] rider {} transfer to {} was rejected",
+                            p.getUUID(), dstLevel.dimension().location());
+                    continue;
+                }
                 p.setDeltaMovement(Vec3.ZERO);
                 p.hurtMarked = true;
                 p.fallDistance = 0.0f;
@@ -1204,7 +1209,7 @@ public final class PortalTeleport {
             float yaw = b.yawDelta() + newYawBase;
             DimensionTransition transition = new DimensionTransition(
                     dstLevel, worldFinal, Vec3.ZERO, yaw, b.pitch(), DimensionTransition.DO_NOTHING);
-            Entity newEntity = e.changeDimension(transition);
+            Entity newEntity = TransferTravelScope.allow(e, () -> e.changeDimension(transition));
             if (newEntity != null) {
                 newEntity.fallDistance = 0.0f;
                 AeroPortals.LOGGER.debug("[AeroPortals] moved entity {} ({}) -> {} yaw={}",
