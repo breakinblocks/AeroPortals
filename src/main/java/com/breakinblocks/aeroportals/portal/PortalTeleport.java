@@ -1044,7 +1044,7 @@ public final class PortalTeleport {
                     BlockState s = dstLevel.getBlockState(cursor);
                     if (s.isAir()) continue;
                     if (s.canBeReplaced()) continue;
-                    if (!s.getFluidState().isEmpty()) continue;
+                    if (s.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) continue;
                     if (s.is(Blocks.END_GATEWAY)) continue;
                     if (isPortalRelated(dstLevel, cursor)) continue;
                     return Optional.of(cursor.immutable());
@@ -1076,7 +1076,7 @@ public final class PortalTeleport {
                     BlockState s = dstLevel.getBlockState(cursor);
                     if (s.isAir()) continue;
                     if (s.canBeReplaced()) continue;
-                    if (!s.getFluidState().isEmpty()) continue;
+                    if (s.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) continue;
                     if (s.is(Blocks.END_GATEWAY)) continue;
                     if (isPortalRelated(dstLevel, cursor)) continue;
                     if (s.getDestroySpeed(dstLevel, cursor) < 0) {
