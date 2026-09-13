@@ -75,7 +75,7 @@ public final class AeroPortalsCommands {
                                 .executes(ctx -> listMethods(ctx.getSource())))
                         .then(Commands.literal("ships")
                                 .executes(ctx -> listShips(ctx.getSource(), null))
-                                .then(Commands.argument(ARG_DIMENSION, StringArgumentType.string())
+                                .then(Commands.argument(ARG_DIMENSION, StringArgumentType.greedyString())
                                         .suggests(SUGGEST_DIMENSIONS)
                                         .executes(ctx -> listShips(ctx.getSource(),
                                                 StringArgumentType.getString(ctx, ARG_DIMENSION)))))
