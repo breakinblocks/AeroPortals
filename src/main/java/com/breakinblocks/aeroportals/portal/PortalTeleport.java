@@ -252,7 +252,7 @@ public final class PortalTeleport {
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        return PortalDestination.of(dstLevel, dstWorld, resolved.generated(), "aether");
+        return PortalDestination.of(dstLevel, dstWorld, true, "aether");
     }
 
     private static DestinationResolution resolveAetherDestinationPortal(
@@ -340,7 +340,7 @@ public final class PortalTeleport {
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        return PortalDestination.of(dstLevel, dstWorld, resolved.generated(), "deeperdarker");
+        return PortalDestination.of(dstLevel, dstWorld, true, "deeperdarker");
     }
 
     private static DestinationResolution resolveDeeperDarkerDestinationPortal(
