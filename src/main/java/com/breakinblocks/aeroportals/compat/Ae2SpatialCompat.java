@@ -21,9 +21,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.fml.ModList;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -32,11 +36,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+@EventBusSubscriber(modid = AeroPortals.MOD_ID)
 public final class Ae2SpatialCompat {
     public static final String MOD_ID = "ae2";
     private static final String PLOT_MANAGER_CLASS = "appeng.spatial.SpatialStoragePlotManager";
@@ -59,8 +65,47 @@ public final class Ae2SpatialCompat {
     private static Method transitionGetTimestamp;
 
     private static final Map<Integer, Instant> seenTransitions = new HashMap<>();
+    private static final List<QueuedMove> pendingMoves = new ArrayList<>();
+    private static MinecraftServer activeServer;
     private static boolean seeded;
     private static long lastErrorLogTick = Long.MIN_VALUE;
+
+    private record ShipSnapshot(UUID id, Vec3 position, AABB bounds) {
+        ShipSnapshot translated(Vec3 shift) {
+            return new ShipSnapshot(id, position.add(shift), bounds.move(shift));
+        }
+    }
+
+    private record GroupSnapshot(ResourceKey<Level> dimension, UUID rootId, List<ShipSnapshot> ships) {
+        GroupSnapshot {
+            ships = List.copyOf(ships);
+        }
+
+        Set<UUID> ids() {
+            Set<UUID> ids = new HashSet<>();
+            for (ShipSnapshot ship : ships) ids.add(ship.id());
+            return ids;
+        }
+
+        GroupSnapshot translated(ResourceKey<Level> destination, Vec3 shift) {
+            return new GroupSnapshot(destination, rootId, ships.stream().map(ship -> ship.translated(shift)).toList());
+        }
+
+        Vec3 rootPosition() {
+            return ships.stream().filter(ship -> ship.id().equals(rootId)).findFirst().orElseThrow().position();
+        }
+    }
+
+    private record SpatialMove(GroupSnapshot source, GroupSnapshot destination, String label) {}
+
+    private static final class QueuedMove {
+        final SpatialMove move;
+        long retryAt;
+
+        QueuedMove(SpatialMove move) {
+            this.move = move;
+        }
+    }
 
     private Ae2SpatialCompat() {}
 
@@ -124,6 +169,10 @@ public final class Ae2SpatialCompat {
 
     public static void tick(MinecraftServer server) {
         if (!isAvailable()) return;
+        if (activeServer != server) {
+            clear();
+            activeServer = server;
+        }
         try {
             List<?> plots = (List<?>) managerGetPlots.invoke(plotManager);
             if (!seeded) {
@@ -145,21 +194,34 @@ public final class Ae2SpatialCompat {
                 if (transition == null) continue;
                 Instant ts = (Instant) transitionGetTimestamp.invoke(transition);
                 if (ts.equals(seenTransitions.get(id))) continue;
-                seenTransitions.put(id, ts);
-                handleTransition(server, plot, transition);
+                if (handleTransition(server, plot, transition)) seenTransitions.put(id, ts);
             }
             seenTransitions.keySet().retainAll(present);
         } catch (Throwable t) {
             long now = server.getTickCount();
-            if (now - lastErrorLogTick >= ERROR_LOG_INTERVAL_TICKS) {
+            if (lastErrorLogTick == Long.MIN_VALUE || now - lastErrorLogTick >= ERROR_LOG_INTERVAL_TICKS) {
                 lastErrorLogTick = now;
                 AeroPortals.LOGGER.warn("[AeroPortals] AE2 spatial poll failed: {}", t.toString());
             }
         }
+        if (TravelMethods.isEnabled(TravelMethods.AE2_SPATIAL)) processPending(server, server.getTickCount());
     }
 
-    private static void handleTransition(MinecraftServer server, Object plot, Object transition) throws ReflectiveOperationException {
-        if (!TravelMethods.isEnabled(TravelMethods.AE2_SPATIAL)) return;
+    public static void clear() {
+        seenTransitions.clear();
+        pendingMoves.clear();
+        seeded = false;
+        activeServer = null;
+        lastErrorLogTick = Long.MIN_VALUE;
+    }
+
+    @SubscribeEvent
+    public static void onServerStopped(ServerStoppedEvent event) {
+        if (activeServer == event.getServer()) clear();
+    }
+
+    private static boolean handleTransition(MinecraftServer server, Object plot, Object transition) throws ReflectiveOperationException {
+        if (!TravelMethods.isEnabled(TravelMethods.AE2_SPATIAL)) return true;
 
         int plotId = (Integer) plotGetId.invoke(plot);
         ResourceLocation worldId = (ResourceLocation) transitionGetWorldId.invoke(transition);
@@ -172,39 +234,125 @@ public final class Ae2SpatialCompat {
         ServerLevel spatialLevel = (ServerLevel) managerGetLevel.invoke(plotManager);
         if (worldLevel == null || spatialLevel == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] AE2 spatial transition on plot {} references unavailable level (world={}); skipping", plotId, worldId);
-            return;
+            return false;
         }
 
         BlockPos interiorMin = resolveInteriorMin(min, max, size);
         if (interiorMin == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] AE2 spatial transition on plot {}: region {}..{} does not match plot size {}; skipping", plotId, min, max, size);
-            return;
+            return true;
         }
 
         AABB worldRegion = regionAabb(interiorMin, size);
         AABB plotRegion = regionAabb(origin, size);
-
-        List<ServerSubLevel> storing = containedSubs(worldLevel, worldRegion, plotId);
-        List<ServerSubLevel> recalling = containedSubs(spatialLevel, plotRegion, plotId);
-        if (storing.isEmpty() && recalling.isEmpty()) return;
 
         Vec3 storeShift = new Vec3(
                 origin.getX() - interiorMin.getX(),
                 origin.getY() - interiorMin.getY(),
                 origin.getZ() - interiorMin.getZ());
 
-        AeroPortals.LOGGER.debug("[AeroPortals] AE2 spatial transition on plot {} ({} -> cell): storing {} sub(s), recalling {} sub(s)",
-                plotId, worldId, storing.size(), recalling.size());
+        queueTransition(worldLevel, spatialLevel, worldRegion, plotRegion, storeShift, plotId);
+        return true;
+    }
 
-        for (ServerSubLevel sub : storing) {
-            UUID id = sub.getUniqueId();
-            PortalTeleport.teleportToDimension(worldLevel, sub, spatialLevel, subPos(sub).add(storeShift), false, "ae2-spatial-store");
-            scheduleSyntheticSettles(spatialLevel, id);
+    private static void queueTransition(ServerLevel worldLevel, ServerLevel spatialLevel,
+                                        AABB worldRegion, AABB plotRegion, Vec3 storeShift, int plotId) {
+        List<GroupSnapshot> groups = new ArrayList<>();
+        groups.addAll(snapshotGroups(worldLevel));
+        groups.addAll(snapshotGroups(spatialLevel));
+        // A later region swap sees the result of earlier queued moves, even if they are still retrying.
+        for (QueuedMove queued : pendingMoves) {
+            GroupSnapshot destination = queued.move.destination();
+            Set<UUID> ids = destination.ids();
+            groups.removeIf(group -> group.ships().stream().anyMatch(ship -> ids.contains(ship.id())));
+            groups.add(destination);
         }
-        for (ServerSubLevel sub : recalling) {
-            UUID id = sub.getUniqueId();
-            PortalTeleport.teleportToDimension(spatialLevel, sub, worldLevel, subPos(sub).subtract(storeShift), false, "ae2-spatial-recall");
-            scheduleSyntheticSettles(worldLevel, id);
+        List<GroupSnapshot> storing = containedGroups(groups, worldLevel.dimension(), worldRegion, plotId);
+        List<GroupSnapshot> recalling = containedGroups(groups, spatialLevel.dimension(), plotRegion, plotId);
+        List<QueuedMove> captured = new ArrayList<>();
+        for (GroupSnapshot group : storing) {
+            captured.add(new QueuedMove(new SpatialMove(group,
+                    group.translated(spatialLevel.dimension(), storeShift), "ae2-spatial-store")));
+        }
+        for (GroupSnapshot group : recalling) {
+            captured.add(new QueuedMove(new SpatialMove(group,
+                    group.translated(worldLevel.dimension(), storeShift.scale(-1)), "ae2-spatial-recall")));
+        }
+        pendingMoves.addAll(captured);
+        AeroPortals.LOGGER.debug("[AeroPortals] AE2 spatial transition on plot {}: queued {} store(s), {} recall(s)",
+                plotId, storing.size(), recalling.size());
+    }
+
+    private static List<GroupSnapshot> snapshotGroups(ServerLevel level) {
+        ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
+        if (container == null) return List.of();
+        List<GroupSnapshot> groups = new ArrayList<>();
+        Set<UUID> claimed = new HashSet<>();
+        for (ServerSubLevel sub : List.copyOf(container.getAllSubLevels())) {
+            if (sub.isRemoved() || claimed.contains(sub.getUniqueId())) continue;
+            Collection<ServerSubLevel> chain = SubLevelHelper.getLoadingDependencyChain(sub);
+            List<ShipSnapshot> ships = new ArrayList<>();
+            for (ServerSubLevel member : chain) {
+                if (member.isRemoved()) continue;
+                claimed.add(member.getUniqueId());
+                ships.add(new ShipSnapshot(member.getUniqueId(), subPos(member), AabbUtil.worldAabb(member)));
+            }
+            if (!ships.isEmpty()) {
+                Set<UUID> ids = new HashSet<>();
+                for (ShipSnapshot ship : ships) ids.add(ship.id());
+                Iterator<GroupSnapshot> previous = groups.iterator();
+                while (previous.hasNext()) {
+                    GroupSnapshot group = previous.next();
+                    if (group.ships().stream().noneMatch(ship -> ids.contains(ship.id()))) continue;
+                    for (ShipSnapshot ship : group.ships()) {
+                        if (ids.add(ship.id())) ships.add(ship);
+                    }
+                    previous.remove();
+                }
+                groups.add(new GroupSnapshot(level.dimension(), sub.getUniqueId(), ships));
+            }
+        }
+        return groups;
+    }
+
+    private static void processPending(MinecraftServer server, long now) {
+        Set<UUID> blocked = new HashSet<>();
+        Iterator<QueuedMove> it = pendingMoves.iterator();
+        while (it.hasNext()) {
+            QueuedMove queued = it.next();
+            SpatialMove move = queued.move;
+            Set<UUID> ids = move.source().ids();
+            if (ids.stream().anyMatch(blocked::contains) || now < queued.retryAt) {
+                blocked.addAll(ids);
+                continue;
+            }
+            boolean succeeded = false;
+            try {
+                ServerLevel src = server.getLevel(move.source().dimension());
+                ServerLevel dst = server.getLevel(move.destination().dimension());
+                ServerSubLevelContainer container = src == null ? null : SubLevelContainer.getContainer(src);
+                ServerSubLevel sub = container == null ? null : (ServerSubLevel) container.getSubLevel(move.source().rootId());
+                if (sub != null && !sub.isRemoved() && dst != null) {
+                    Set<UUID> currentIds = new HashSet<>();
+                    for (ServerSubLevel member : SubLevelHelper.getLoadingDependencyChain(sub)) {
+                        if (!member.isRemoved()) currentIds.add(member.getUniqueId());
+                    }
+                    if (ids.equals(currentIds)) {
+                        succeeded = PortalTeleport.teleportSpatial(src, sub, dst, move.destination().rootPosition(), move.label());
+                        if (succeeded) {
+                            for (UUID id : ids) scheduleSyntheticSettles(dst, id);
+                        }
+                    }
+                }
+            } catch (RuntimeException failure) {
+                AeroPortals.LOGGER.warn("[AeroPortals] AE2 spatial move for {} failed; retaining it for retry", move.source().rootId(), failure);
+            }
+            if (succeeded) {
+                it.remove();
+            } else {
+                queued.retryAt = now + 20;
+                blocked.addAll(ids);
+            }
         }
     }
 
@@ -228,30 +376,19 @@ public final class Ae2SpatialCompat {
                 minCorner.getX() + size.getX(), minCorner.getY() + size.getY(), minCorner.getZ() + size.getZ());
     }
 
-    private static List<ServerSubLevel> containedSubs(ServerLevel level, AABB region, int plotId) {
-        ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
-        if (container == null) return List.of();
+    private static List<GroupSnapshot> containedGroups(List<GroupSnapshot> groups, ResourceKey<Level> dimension,
+                                                      AABB region, int plotId) {
         AABB tolerant = region.inflate(0.5);
-        List<ServerSubLevel> result = new ArrayList<>();
-        Set<UUID> claimed = new HashSet<>();
-        for (ServerSubLevel sub : container.getAllSubLevels()) {
-            if (sub.isRemoved() || claimed.contains(sub.getUniqueId())) continue;
-            if (!AabbUtil.worldAabb(sub).intersects(region)) continue;
-            Collection<ServerSubLevel> chain = SubLevelHelper.getLoadingDependencyChain(sub);
-            boolean allContained = true;
-            for (ServerSubLevel member : chain) {
-                if (member.isRemoved()) continue;
-                claimed.add(member.getUniqueId());
-                if (!containsAabb(tolerant, AabbUtil.worldAabb(member))) {
-                    allContained = false;
-                }
-            }
-            if (!allContained) {
+        List<GroupSnapshot> result = new ArrayList<>();
+        for (GroupSnapshot group : groups) {
+            if (!group.dimension().equals(dimension)) continue;
+            if (group.ships().stream().noneMatch(ship -> ship.bounds().intersects(region))) continue;
+            if (group.ships().stream().anyMatch(ship -> !containsAabb(tolerant, ship.bounds()))) {
                 AeroPortals.LOGGER.warn("[AeroPortals] sub {} overlaps AE2 spatial region for plot {} but its chain is not fully inside; leaving it behind",
-                        sub.getUniqueId(), plotId);
+                        group.rootId(), plotId);
                 continue;
             }
-            result.add(sub);
+            result.add(group);
         }
         return result;
     }
