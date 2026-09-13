@@ -37,6 +37,11 @@ public final class DriveByWireCompat implements TransferCarrier<CompoundTag> {
     }
 
     @Override
+    public void discard(ServerLevel level, ServerSubLevel sub) {
+        // DBW's REMOVED observer retires this dimension's connections with the ship.
+    }
+
+    @Override
     public void validateGroup(ServerLevel src, List<ServerSubLevel> group, ServerLevel dst) {
         if (src == dst) return;
         Set<UUID> owners = new HashSet<>();

@@ -42,6 +42,11 @@ public final class GadgetsAndGizmosCompat implements TransferCarrier<CompoundTag
     }
 
     @Override
+    public void discard(ServerLevel level, ServerSubLevel sub) {
+        // This tracker is global. Its record already belongs to the recovered target copy.
+    }
+
+    @Override
     public void validateGroup(ServerLevel src, List<ServerSubLevel> group, ServerLevel dst) {
         Set<UUID> owners = new HashSet<>();
         group.forEach(sub -> owners.add(sub.getUniqueId()));

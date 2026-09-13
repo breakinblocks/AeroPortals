@@ -14,6 +14,11 @@ public interface TransferCarrier<T> {
 
     void replay(ServerLevel dstLevel, ServerSubLevel newSub, T captured, BlockPos plotShift);
 
+    /** Removes carried state from a retired copy without replaying it; external-state snapshots may override with a no-op. */
+    default void discard(ServerLevel level, ServerSubLevel sub) {
+        capture(level, sub);
+    }
+
     default void validateGroup(ServerLevel source, List<ServerSubLevel> group, ServerLevel destination) {}
 
     default CompoundTag serialize(T captured) {
