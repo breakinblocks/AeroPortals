@@ -33,7 +33,7 @@ side = "BOTH"
 [[dependencies.${mod_id}]]
 modId = "sable"
 type = "required"
-versionRange = "[1.0,)"
+versionRange = "[2.0.3,3)"
 ordering = "AFTER"
 side = "BOTH"
 

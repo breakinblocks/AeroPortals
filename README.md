@@ -107,7 +107,7 @@ Brings the airship with that id to where you are standing. Use it when a ship ha
 |---|---|---|
 | Minecraft | 1.21.1 | yes |
 | NeoForge | 21.1.230+ | yes |
-| [Sable](https://www.curseforge.com/minecraft/mc-mods/sable) | 1.0+ | yes |
+| [Sable](https://www.curseforge.com/minecraft/mc-mods/sable) | 2.0.3 to <3.0 | yes |
 | [Create](https://www.curseforge.com/minecraft/mc-mods/create) | 6.0+ | optional (needed to actually build airships) |
 | [The Aether](https://www.curseforge.com/minecraft/mc-mods/aether) | 1.5+ | optional |
 | [Ars Nouveau](https://www.curseforge.com/minecraft/mc-mods/ars-nouveau) | 5.11+ | optional |
