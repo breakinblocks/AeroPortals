@@ -82,12 +82,16 @@ public final class SimulatedCompat {
         if (glueBoxes.isEmpty() || !isAvailable()) return;
         for (AABB box : glueBoxes) {
             AABB moved = box.move(shift.getX(), shift.getY(), shift.getZ());
+            boolean exists = !level.getEntitiesOfClass(Entity.class, moved.inflate(0.01),
+                    entity -> honeyGlueClass.isInstance(entity) && !entity.isRemoved()
+                            && entity.getBoundingBox().equals(moved)).isEmpty();
+            if (exists) continue;
             try {
                 Entity glue = (Entity) honeyGlueCtor.newInstance(level, moved);
-                level.addFreshEntity(glue);
+                if (!level.addFreshEntity(glue)) throw new IllegalStateException("Destination rejected honey glue");
                 setBoundsAndSync.invoke(glue, moved);
             } catch (ReflectiveOperationException | RuntimeException e) {
-                AeroPortals.LOGGER.error("[AeroPortals] failed to replay honey glue at {} post-teleport", moved, e);
+                throw new IllegalStateException("Failed to replay honey glue at " + moved, e);
             }
         }
         AeroPortals.LOGGER.debug("[AeroPortals] replayed {} honey glue box(es) post-teleport (shift {})", glueBoxes.size(), shift);

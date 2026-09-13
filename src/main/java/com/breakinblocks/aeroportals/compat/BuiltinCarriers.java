@@ -62,7 +62,9 @@ public final class BuiltinCarriers {
 
         @Override
         public void replay(ServerLevel dstLevel, ServerSubLevel newSub, List<CompoundTag> captured, BlockPos plotShift) {
-            for (CompoundTag tag : captured) {
+            for (CompoundTag saved : captured) {
+                if (saved.hasUUID("UUID") && dstLevel.getEntity(saved.getUUID("UUID")) != null) continue;
+                CompoundTag tag = saved.copy();
                 shift(tag, plotShift);
                 Entity restored = EntityType.loadEntityRecursive(tag, dstLevel, e -> e);
                 if (restored == null) {

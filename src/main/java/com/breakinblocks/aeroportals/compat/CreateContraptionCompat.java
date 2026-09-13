@@ -116,7 +116,11 @@ public final class CreateContraptionCompat {
         static void replayGlue(ServerLevel level, List<AABB> glueBoxes, BlockPos shift) {
             for (AABB box : glueBoxes) {
                 AABB moved = box.move(shift.getX(), shift.getY(), shift.getZ());
-                level.addFreshEntity(new SuperGlueEntity(level, moved));
+                boolean exists = level.getEntitiesOfClass(SuperGlueEntity.class, moved.inflate(0.01)).stream()
+                        .anyMatch(glue -> !glue.isRemoved() && glue.getBoundingBox().equals(moved));
+                if (!exists && !level.addFreshEntity(new SuperGlueEntity(level, moved))) {
+                    throw new IllegalStateException("Destination rejected super glue at " + moved);
+                }
             }
             AeroPortals.LOGGER.debug("[AeroPortals] replayed {} super glue box(es) post-teleport (shift {})", glueBoxes.size(), shift);
         }
