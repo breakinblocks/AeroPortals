@@ -17,6 +17,7 @@ public final class AeroPortalsConfig {
     public static final ModConfigSpec.BooleanValue CLEAR_VELOCITY_ON_ARRIVAL;
     public static final ModConfigSpec.BooleanValue CLEAR_DESTINATION_BLOCKS;
     public static final ModConfigSpec.BooleanValue ONBOARD_PORTAL_JUMPS;
+    public static final ModConfigSpec.BooleanValue ONBOARD_GENERATE_DESTINATION_PORTAL;
     public static final ModConfigSpec.IntValue ONBOARD_JUMP_DELAY_TICKS;
     public static final ModConfigSpec.ConfigValue<List<? extends String>> DISABLED_TRAVEL_METHODS;
     public static final ModConfigSpec.BooleanValue CATCH_FALLING_SHIPS;
@@ -59,6 +60,9 @@ public final class AeroPortalsConfig {
         ONBOARD_PORTAL_JUMPS = builder
                 .comment("If true, a lit nether portal built aboard an airship acts as a jump drive: shortly after the portal is lit the whole ship jumps to the other dimension, portal and all. The onboard portal must be extinguished and re-lit before it can jump again.")
                 .define("onboard_portal_jumps", false);
+        ONBOARD_GENERATE_DESTINATION_PORTAL = builder
+                .comment("If true, onboard jumps link to or generate a matching destination portal using generate_matching_portal. If false, onboard jumps arrive at dimension-scaled coordinates without searching for or creating a destination portal; landing safety checks still apply.")
+                .define("onboard_generate_destination_portal", true);
         ONBOARD_JUMP_DELAY_TICKS = builder
                 .comment("Ticks between an onboard portal being lit and the ship jumping. Gives riders time to abort by breaking the portal.")
                 .defineInRange("onboard_jump_delay_ticks", 100, 0, 24000);

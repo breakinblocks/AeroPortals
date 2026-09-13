@@ -30,6 +30,7 @@ import java.util.UUID;
 
 public final class OnboardPortalJump {
     private static final long STALE_STATE_TICKS = 6000L;
+    private static final long MIN_RETRY_DELAY_TICKS = 100L;
 
     private static final class State {
         boolean spent;
@@ -89,10 +90,16 @@ public final class OnboardPortalJump {
                 states.remove(id);
                 continue;
             }
-            state.spent = true;
             AeroPortals.LOGGER.debug("[AeroPortals] sub {} onboard portal jump firing (portal at plot pos {}, axis={} {}x{})",
                     id, portalPos, rect.axis(), rect.width(), rect.height());
-            PortalTeleport.jumpOnboardNetherPortal(level, sub, rect);
+            state.spent = PortalTeleport.jumpOnboardNetherPortal(level, sub, rect);
+            if (!state.spent) {
+                long retryDelay = Math.max(MIN_RETRY_DELAY_TICKS,
+                        Math.max(AeroPortalsConfig.ONBOARD_JUMP_DELAY_TICKS.get(), AeroPortalsConfig.PORTAL_COOLDOWN_TICKS.get()));
+                state.jumpAtTick = now + retryDelay;
+                messageRiders(level, sub, "AeroPortals: onboard jump failed. Check the destination and portal settings. Retrying in about "
+                        + ((retryDelay + 19) / 20) + "s; extinguish the portal to cancel.");
+            }
         }
 
         Iterator<Map.Entry<UUID, State>> it = states.entrySet().iterator();

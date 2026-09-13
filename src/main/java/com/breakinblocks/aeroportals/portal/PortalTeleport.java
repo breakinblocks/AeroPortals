@@ -80,8 +80,12 @@ public final class PortalTeleport {
     private PortalTeleport() {}
 
     public static void dispatch(ServerLevel srcLevel, ServerSubLevel sub, PortalDestination destination) {
-        if (destination == null) return;
-        executeChainMove(srcLevel, sub, destination.level(), destination.subWorldPos(),
+        dispatchResult(srcLevel, sub, destination);
+    }
+
+    public static boolean dispatchResult(ServerLevel srcLevel, ServerSubLevel sub, PortalDestination destination) {
+        if (destination == null) return false;
+        return executeChainMove(srcLevel, sub, destination.level(), destination.subWorldPos(),
                 destination.validateLanding(), destination.label());
     }
 
@@ -89,8 +93,8 @@ public final class PortalTeleport {
         dispatch(srcLevel, sub, resolveNether(srcLevel, sub, srcRect));
     }
 
-    public static void jumpOnboardNetherPortal(ServerLevel srcLevel, ServerSubLevel sub, PortalRect plotRect) {
-        dispatch(srcLevel, sub, resolveOnboardNetherPortal(srcLevel, sub, plotRect));
+    public static boolean jumpOnboardNetherPortal(ServerLevel srcLevel, ServerSubLevel sub, PortalRect plotRect) {
+        return dispatchResult(srcLevel, sub, resolveOnboardNetherPortal(srcLevel, sub, plotRect));
     }
 
     public static PortalDestination resolveNether(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
@@ -155,6 +159,10 @@ public final class PortalTeleport {
         Vec3 scaledPortalCenter = clampToWorldBorder(dstLevel,
                 new Vec3(srcPortalCenter.x * ratio, srcPortalCenter.y, srcPortalCenter.z * ratio));
         scaledPortalCenter = clampPortalCenterY(dstLevel, scaledPortalCenter, plotRect.height());
+        if (!AeroPortalsConfig.ONBOARD_GENERATE_DESTINATION_PORTAL.get()) {
+            return PortalDestination.of(dstLevel,
+                    clampToWorldBorder(dstLevel, scaledPortalCenter.add(subOffsetFromPortal)), true, "onboard-portal");
+        }
 
         BlockPos searchCenter = BlockPos.containing(scaledPortalCenter);
         ensureChunksLoaded(dstLevel, searchCenter);
@@ -574,7 +582,7 @@ public final class PortalTeleport {
         executeChainMove(srcLevel, sub, dstLevel, dstWorld, validateLanding, contextLabel);
     }
 
-    private static void executeChainMove(
+    private static boolean executeChainMove(
             ServerLevel srcLevel,
             ServerSubLevel sub,
             ServerLevel dstLevel,
@@ -599,7 +607,7 @@ public final class PortalTeleport {
         }
         if (chain.isEmpty()) {
             AeroPortals.LOGGER.warn("[AeroPortals] {} teleport: chain empty after cooldown filter; aborting", contextLabel);
-            return;
+            return false;
         }
         if (chain.size() > 1) {
             AeroPortals.LOGGER.debug("[AeroPortals] {} teleport: dependency chain after filter: {} SubLevels will travel together: {}",
@@ -611,7 +619,7 @@ public final class PortalTeleport {
         if (NeoForge.EVENT_BUS.post(preEvent).isCanceled()) {
             AeroPortals.LOGGER.debug("[AeroPortals] {} teleport cancelled by a listener{}",
                     contextLabel, preEvent.cancelReason() == null ? "" : ": " + preEvent.cancelReason());
-            return;
+            return false;
         }
         if (!preEvent.destination().equals(dstWorld)) {
             AeroPortals.LOGGER.debug("[AeroPortals] {} teleport destination changed by a listener: {} -> {}",
@@ -670,7 +678,7 @@ public final class PortalTeleport {
                                 contextLabel, pm.sub.getUniqueId(), blockerPos,
                                 blockerState.getBlock(), pm.dstPos);
                         messageAbort(srcLevel, dstLevel, chain, blockerPos, blockerState);
-                        return;
+                        return false;
                     }
                 }
             }
@@ -752,6 +760,7 @@ public final class PortalTeleport {
 
         AeroPortals.LOGGER.debug("[AeroPortals] {} teleport complete; moved {}/{} sub(s) from chain",
                 contextLabel, moved.size(), plans.size());
+        return moved.size() == plans.size() && !moved.isEmpty();
     }
 
     private record PendingMove(ServerSubLevel sub, Vec3 srcPos, Vec3 dstPos) {}
