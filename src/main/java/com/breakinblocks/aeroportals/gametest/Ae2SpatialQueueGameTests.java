@@ -1,6 +1,7 @@
 package com.breakinblocks.aeroportals.gametest;
 
 import com.breakinblocks.aeroportals.api.SubLevelPreTransferEvent;
+import com.breakinblocks.aeroportals.AeroPortals;
 import com.breakinblocks.aeroportals.compat.Ae2SpatialCompat;
 import com.breakinblocks.aeroportals.portal.PortalCooldown;
 import com.breakinblocks.aeroportals.util.AabbUtil;
@@ -39,7 +40,8 @@ public class Ae2SpatialQueueGameTests {
         ServerLevel world = helper.getLevel();
         ServerLevel cell = world.getServer().getLevel(Level.NETHER);
         helper.assertTrue(cell != null, "test destination must exist");
-        BlockPos origin = helper.absolutePos(new BlockPos(7, 4, 7));
+        // Keep both sides within valid build heights and ordinary physics coordinate precision.
+        BlockPos origin = new BlockPos(12000, 100, 12000);
         world.setBlockAndUpdate(origin, Blocks.OBSIDIAN.defaultBlockState());
         ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(world, origin, List.of(origin),
                 new BoundingBox3i(origin.getX() - 1, origin.getY() - 1, origin.getZ() - 1,
@@ -70,13 +72,18 @@ public class Ae2SpatialQueueGameTests {
             process(world.getServer(), now + 20);
             helper.assertTrue(probe.labels.equals(List.of("ae2-spatial-store", "ae2-spatial-store", "ae2-spatial-recall")),
                     "retry must store then recall, without storing the original source twice");
+            helper.assertTrue(probe.destinations.equals(List.of(start.add(shift), start.add(shift), start)),
+                    "each queued attempt must request its exact captured destination: " + probe.destinations);
             helper.assertTrue(pendingCount() == 0, "both successful operations must leave the queue");
             ServerSubLevel returned = (ServerSubLevel) SubLevelContainer.getContainer(world).getSubLevel(id);
             helper.assertTrue(returned != null, "rapid store/recall must return the ship despite fresh portal cooldown");
             helper.assertTrue(SubLevelContainer.getContainer(cell).getSubLevel(id) == null,
                     "rapid recall must not leave the ship in storage");
-            helper.assertTrue(position(returned).distanceToSqr(start) < 0.001,
-                    "queued recall must preserve the originally captured destination");
+            Vec3 actual = position(returned);
+            AeroPortals.LOGGER.info("[AeroPortals/test] AE2 queued recall expected={} actual={} squared-error={}",
+                    start, actual, actual.distanceToSqr(start));
+            helper.assertTrue(actual.distanceToSqr(start) < 0.001,
+                    "queued recall must preserve the originally captured destination; expected " + start + ", actual " + actual);
         } finally {
             NeoForge.EVENT_BUS.unregister(probe);
             Ae2SpatialCompat.clear();
@@ -117,6 +124,7 @@ public class Ae2SpatialQueueGameTests {
     public static final class VetoProbe {
         private final UUID ship;
         final List<String> labels = new ArrayList<>();
+        final List<Vec3> destinations = new ArrayList<>();
         boolean cancel = true;
 
         VetoProbe(UUID ship) {
@@ -127,6 +135,7 @@ public class Ae2SpatialQueueGameTests {
         public void onTransfer(SubLevelPreTransferEvent event) {
             if (!event.sub().getUniqueId().equals(ship)) return;
             labels.add(event.label());
+            destinations.add(event.originalDestination());
             if (cancel) event.cancel("queue retry probe");
         }
     }

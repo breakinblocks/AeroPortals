@@ -6,7 +6,6 @@ import com.breakinblocks.aeroportals.compat.SimulatedRopeCompat;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import dev.ryanhcode.sable.api.SubLevelAssemblyHelper;
-import dev.ryanhcode.sable.api.SubLevelHelper;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.companion.math.BoundingBox3i;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
@@ -67,8 +66,11 @@ public class Ae2RopeContainmentGameTests {
                         BlockPos plotB = connector(source, ships[1], connector);
                         BlockPos plotC = connector(source, ships[2], connector);
                         tie(source, plotA, plotB);
-                        helper.assertTrue(!SubLevelHelper.getLoadingDependencyChain(ships[0]).contains(ships[1]),
-                                "the remote rope partner must be outside Sable's loading chain");
+                        helper.assertTrue(!AabbUtil.worldAabb(ships[0]).intersects(AabbUtil.worldAabb(ships[1])),
+                                "rope fixture must connect spatially separate ships");
+                        var expanded = SimulatedRopeCompat.withRopePartners(source, List.of(ships[0]));
+                        helper.assertTrue(expanded.size() == 2 && expanded.contains(ships[1]),
+                                "rope expansion from one ship must discover its separate partner");
                         helper.assertTrue(PortalTeleport.transferGroup(source, ships[0]).contains(ships[1]),
                                 "the transfer must include the remote rope partner");
                         AABB narrow = AabbUtil.worldAabb(ships[0]).inflate(1);
