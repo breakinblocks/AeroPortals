@@ -109,10 +109,13 @@ public final class SableBridge {
             tag.put("world_bounds", SableNBTUtils.writeBoundingBox(worldBounds));
         }
 
-        TeleportJournal.write(
+        if (!TeleportJournal.write(
                 srcLevel.getServer(), data.uuid(),
                 srcLevel.dimension().location(), dstLevel.dimension().location(),
-                srcLevel.getMinBuildHeight(), data);
+                srcLevel.getMinBuildHeight(), data)) {
+            replayCarriers(srcLevel, src, carried, BlockPos.ZERO);
+            return null;
+        }
 
         srcContainer.removeSubLevel(src, SubLevelRemovalReason.REMOVED);
         AeroPortals.LOGGER.debug("[AeroPortals] SableBridge: removed source sub-level");

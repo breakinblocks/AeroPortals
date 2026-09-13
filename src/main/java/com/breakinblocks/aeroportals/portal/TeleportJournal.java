@@ -32,7 +32,7 @@ public final class TeleportJournal {
 
     private TeleportJournal() {}
 
-    public static void write(
+    public static boolean write(
             MinecraftServer server,
             UUID subUuid,
             ResourceLocation srcDim,
@@ -53,9 +53,11 @@ public final class TeleportJournal {
             NbtIo.writeCompressed(entry, file);
             AeroPortals.LOGGER.debug("[AeroPortals] journal: wrote pending entry for sub {} ({} -> {}) at {}",
                     subUuid, srcDim, dstDim, file);
+            return true;
         } catch (IOException e) {
             AeroPortals.LOGGER.error("[AeroPortals] journal: failed to write pending entry for sub {}: {}",
                     subUuid, e.getMessage());
+            return false;
         }
     }
 
