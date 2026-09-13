@@ -6,7 +6,6 @@ import com.breakinblocks.aeroportals.portal.EntityRiderBinding;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.portal.RiderBinding;
 import com.breakinblocks.aeroportals.util.AabbUtil;
-import dev.ryanhcode.sable.api.SubLevelHelper;
 import dev.ryanhcode.sable.api.entity.EntitySubLevelUtil;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
@@ -290,7 +289,7 @@ public final class Ae2SpatialCompat {
         Set<UUID> claimed = new HashSet<>();
         for (ServerSubLevel sub : List.copyOf(container.getAllSubLevels())) {
             if (sub.isRemoved() || claimed.contains(sub.getUniqueId())) continue;
-            Collection<ServerSubLevel> chain = SubLevelHelper.getLoadingDependencyChain(sub);
+            Collection<ServerSubLevel> chain = PortalTeleport.transferGroup(level, sub);
             List<ShipSnapshot> ships = new ArrayList<>();
             for (ServerSubLevel member : chain) {
                 if (member.isRemoved()) continue;
@@ -334,7 +333,7 @@ public final class Ae2SpatialCompat {
                 ServerSubLevel sub = container == null ? null : (ServerSubLevel) container.getSubLevel(move.source().rootId());
                 if (sub != null && !sub.isRemoved() && dst != null) {
                     Set<UUID> currentIds = new HashSet<>();
-                    for (ServerSubLevel member : SubLevelHelper.getLoadingDependencyChain(sub)) {
+                    for (ServerSubLevel member : PortalTeleport.transferGroup(src, sub)) {
                         if (!member.isRemoved()) currentIds.add(member.getUniqueId());
                     }
                     if (ids.equals(currentIds)) {
