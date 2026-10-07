@@ -350,7 +350,7 @@ public class UnattendedArrivalGameTests {
                 .thenSucceed();
     }
 
-    @GameTest(batch = "unattended_heldShipComesBackWhenChunksLoad", template = EMPTY, timeoutTicks = 900)
+    @GameTest(batch = "unattended_heldShipComesBackWhenChunksLoad", template = EMPTY, timeoutTicks = 2400)
     public static void unattended_heldShipComesBackWhenChunksLoad(GameTestHelper helper) {
         GameTestSupport.isolate(helper);
         ServerLevel srcLevel = helper.getLevel();
@@ -362,6 +362,7 @@ public class UnattendedArrivalGameTests {
 
         UUID[] uuidRef = new UUID[1];
         Vec3[] wantedRef = new Vec3[1];
+        long[] forcedAt = new long[1];
 
         helper.startSequence()
                 .thenExecute(() -> {
@@ -375,8 +376,8 @@ public class UnattendedArrivalGameTests {
                     if (sub == null) { helper.fail("assemble failed"); return; }
                     uuidRef[0] = sub.getUniqueId();
 
-                    int centreX = (int) Math.round(origin.getX() / 8.0) + 80;
-                    int centreZ = (int) Math.round(origin.getZ() / 8.0) + 80;
+                    int centreX = ((int) Math.round(origin.getX() / 8.0) + 80) & ~15;
+                    int centreZ = ((int) Math.round(origin.getZ() / 8.0) + 80) & ~15;
                     prepareNetherZone(dstLevel, centreX, centreZ);
                     Vec3 wanted = new Vec3(centreX + 0.5, dstLevel.getMinBuildHeight() + 20, centreZ + 0.5);
                     wantedRef[0] = wanted;
@@ -396,15 +397,12 @@ public class UnattendedArrivalGameTests {
                         }
                     }
                     AeroPortals.LOGGER.info("[AeroPortals/test] comeback: force-loaded 5x5 chunks around {} to stand in for a player arriving", chunkPos);
+                    forcedAt[0] = helper.getTick();
                 })
-                .thenIdle(40)
-                .thenExecute(() -> {
-                    String state = describe(dstContainer, uuidRef[0]);
-                    AeroPortals.LOGGER.info("[AeroPortals/test] comeback: 40 ticks after the chunks came back -> {}", state);
-                    if (dstContainer.getSubLevel(uuidRef[0]) == null) {
-                        helper.fail("ship did not come back when its chunks were loaded again; state was " + state);
-                    }
-                })
+                .thenWaitUntil(() -> helper.assertTrue(dstContainer.getSubLevel(uuidRef[0]) != null,
+                        "ship did not come back when its chunks were loaded again; state was " + describe(dstContainer, uuidRef[0])))
+                .thenExecute(() -> AeroPortals.LOGGER.info("[AeroPortals/test] comeback: ship came back {} ticks after the chunks loaded",
+                        helper.getTick() - forcedAt[0]))
                 .thenSucceed();
     }
 

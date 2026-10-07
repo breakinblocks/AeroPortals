@@ -35,6 +35,7 @@ public final class BuiltinCarriers {
         AeroPortalsApi.registerCarrier(new WallEntityCarrier());
         AeroPortalsApi.registerCarrier(new DriveByWireCompat());
         AeroPortalsApi.registerCarrier(new GadgetsAndGizmosCompat());
+        AeroPortalsApi.registerCarrier(new AeronauticsBalloonFixup());
     }
 
     private static final class WallEntityCarrier implements TransferCarrier<List<CompoundTag>> {
