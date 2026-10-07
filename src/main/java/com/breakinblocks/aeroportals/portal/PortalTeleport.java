@@ -775,7 +775,7 @@ public final class PortalTeleport {
             DeferredClientSyncs.scheduleRetries(server.getTickCount(), dstLevel, newSub);
             DeferredRiderSettles.schedule(server.getTickCount(), dstLevel, newSub, plan.riders, plan.entityRiders);
             PortalCooldown.mark(newSub.getUniqueId(), server.getTickCount());
-            PortalCooldown.suppressUntilLeftPortal(newSub.getUniqueId(), newSubPos);
+            PortalCooldown.suppressUntilLeftPortal(newSub.getUniqueId(), AabbUtil.worldAabb(newSub).getCenter());
             NeoForge.EVENT_BUS.post(new SubLevelTransferEvent(
                     newSub.getUniqueId(), newSub, srcLevel, dstLevel, translation,
                     e.getValue().shift(), chainPlotMoves));

@@ -75,6 +75,7 @@ import java.lang.reflect.Method;
 import java.util.BitSet;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -2638,6 +2639,94 @@ public class PortalGameTests {
                     }
                 })
                 .thenSucceed();
+    }
+
+    @GameTest(batch = "portalContact_shipTeleportsOnlyWhenItsBlocksReachThePortal", template = EMPTY, timeoutTicks = 200)
+    public static void portalContact_shipTeleportsOnlyWhenItsBlocksReachThePortal(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        clearNetherLandingZone(dstLevel, helper.absolutePos(BlockPos.ZERO));
+        ServerSubLevelContainer srcContainer = SubLevelContainer.getContainer(srcLevel);
+        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
+        if (srcContainer == null || dstContainer == null) { helper.fail("containers"); return; }
+
+        PortalBuilder.build(srcLevel, helper.absolutePos(new BlockPos(7, 5, 9)), Direction.Axis.X, 2, 3);
+        List<BlockPos> shipBlocks = new ArrayList<>();
+        for (int i = 2; i <= 12; i++) {
+            for (BlockPos local : List.of(new BlockPos(i, 6, 2), new BlockPos(2, 6, i))) {
+                BlockPos world = helper.absolutePos(local);
+                if (shipBlocks.contains(world)) continue;
+                helper.setBlock(local, Blocks.OBSIDIAN.defaultBlockState());
+                shipBlocks.add(world);
+            }
+        }
+        BlockPos min = helper.absolutePos(new BlockPos(1, 5, 1));
+        BlockPos max = helper.absolutePos(new BlockPos(13, 7, 13));
+        ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(srcLevel, shipBlocks.getFirst(), shipBlocks,
+                new BoundingBox3i(min.getX(), min.getY(), min.getZ(), max.getX(), max.getY(), max.getZ()));
+        if (sub == null) { helper.fail("assemble failed"); return; }
+        UUID id = sub.getUniqueId();
+
+        helper.assertTrue(AabbUtil.worldAabb(sub).inflate(1.0).contains(Vec3.atCenterOf(helper.absolutePos(new BlockPos(7, 6, 9)))),
+                "test ship's bounding box must contain the portal for this check to mean anything");
+        PortalDetector.scan(srcLevel);
+        helper.assertTrue(srcContainer.getSubLevel(id) != null && dstContainer.getSubLevel(id) == null,
+                "ship teleported while its nearest block was five blocks from the portal");
+
+        BlockPos beside = BlockPos.containing(sub.logicalPose().transformPositionInverse(
+                Vec3.atCenterOf(helper.absolutePos(new BlockPos(7, 6, 8)))));
+        srcLevel.setBlock(beside, Blocks.OBSIDIAN.defaultBlockState(), Block.UPDATE_ALL);
+        PortalDetector.scan(srcLevel);
+        helper.assertTrue(srcContainer.getSubLevel(id) == null
+                        && (dstContainer.getSubLevel(id) != null || dstContainer.getHoldingChunkMap().getHoldingSubLevel(id) != null),
+                "ship did not teleport once one of its blocks was beside the portal");
+        helper.succeed();
+    }
+
+    @GameTest(batch = "bounceSuppression_tallShipStaysSuppressedAfterArrival", template = EMPTY, timeoutTicks = 200)
+    public static void bounceSuppression_tallShipStaysSuppressedAfterArrival(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
+        ServerLevel srcLevel = helper.getLevel();
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(Level.NETHER);
+        if (dstLevel == null) { helper.fail("Nether not loaded"); return; }
+        ServerSubLevelContainer dstContainer = SubLevelContainer.getContainer(dstLevel);
+        if (dstContainer == null) { helper.fail("containers"); return; }
+
+        List<BlockPos> shipBlocks = new ArrayList<>();
+        for (int x = 5; x <= 9; x++) {
+            for (int z = 5; z <= 9; z++) {
+                helper.setBlock(new BlockPos(x, 1, z), Blocks.OBSIDIAN.defaultBlockState());
+                shipBlocks.add(helper.absolutePos(new BlockPos(x, 1, z)));
+            }
+        }
+        for (int y = 2; y <= 33; y++) {
+            helper.setBlock(new BlockPos(7, y, 7), Blocks.WHITE_WOOL.defaultBlockState());
+            shipBlocks.add(helper.absolutePos(new BlockPos(7, y, 7)));
+        }
+        BlockPos min = helper.absolutePos(new BlockPos(4, 0, 4));
+        BlockPos max = helper.absolutePos(new BlockPos(10, 34, 10));
+        ServerSubLevel sub = SubLevelAssemblyHelper.assembleBlocks(srcLevel, helper.absolutePos(new BlockPos(7, 1, 7)), shipBlocks,
+                new BoundingBox3i(min.getX(), min.getY(), min.getZ(), max.getX(), max.getY(), max.getZ()));
+        if (sub == null) { helper.fail("assemble failed"); return; }
+        UUID id = sub.getUniqueId();
+
+        BlockPos origin = helper.absolutePos(BlockPos.ZERO);
+        PortalTeleport.teleportToDimension(srcLevel, sub, dstLevel,
+                new Vec3(origin.getX() / 8.0, 64.0, origin.getZ() / 8.0), false, "tall-bounce");
+        ServerSubLevel moved = (ServerSubLevel) dstContainer.getSubLevel(id);
+        helper.assertTrue(moved != null, "tall ship did not arrive in the Nether");
+        Vec3 boxCentre = AabbUtil.worldAabb(moved).getCenter();
+        Vec3 massCentre = new Vec3(moved.logicalPose().position().x(), moved.logicalPose().position().y(), moved.logicalPose().position().z());
+        helper.assertTrue(boxCentre.distanceTo(massCentre) > 8.0,
+                "test ship's centre of mass is only " + boxCentre.distanceTo(massCentre) + " blocks from its box centre");
+        helper.assertTrue(PortalCooldown.isSuppressedUntilLeftPortal(id), "arrived ship was not suppressed from a return trip");
+
+        PortalCooldown.noteAwayFromPortal(id, boxCentre);
+        helper.assertTrue(PortalCooldown.isSuppressedUntilLeftPortal(id),
+                "ship counted as having left the portal the moment it arrived, so it can bounce straight back");
+        helper.succeed();
     }
 
     @GameTest(batch = "selfHeal_destinationLoadFailure_restoresSubToSource", template = EMPTY, timeoutTicks = 200)

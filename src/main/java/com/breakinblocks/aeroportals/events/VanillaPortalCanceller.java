@@ -76,6 +76,6 @@ public final class VanillaPortalCanceller {
     }
 
     private static boolean isOverlappingPortal(ServerLevel level, SubLevel sub) {
-        return PortalBlockSearch.any(level, AabbUtil.worldAabb(sub).inflate(1.0));
+        return PortalBlockSearch.anyTouching(level, sub);
     }
 }

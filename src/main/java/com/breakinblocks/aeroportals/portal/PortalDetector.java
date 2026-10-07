@@ -45,7 +45,7 @@ public final class PortalDetector {
                 continue;
             }
 
-            PortalBlockSearch.Hit hit = PortalBlockSearch.find(level, aabb, plan);
+            PortalBlockSearch.Hit hit = PortalBlockSearch.findTouching(level, sub, aabb, plan);
             if (hit == null) {
                 PortalCooldown.noteAwayFromPortal(id, aabb.getCenter());
                 continue;

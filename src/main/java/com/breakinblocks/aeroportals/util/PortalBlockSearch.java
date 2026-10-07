@@ -3,6 +3,8 @@ package com.breakinblocks.aeroportals.util;
 import com.breakinblocks.aeroportals.api.AeroPortalType;
 import com.breakinblocks.aeroportals.api.AeroPortalsApi;
 import com.breakinblocks.aeroportals.api.PortalScanPlan;
+import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerChunkCache;
 import net.minecraft.server.level.ServerLevel;
@@ -11,20 +13,49 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.function.Predicate;
 
 public final class PortalBlockSearch {
+    private static final double CONTACT_REACH = 1.25;
+
     private PortalBlockSearch() {}
 
     public record Hit(BlockPos pos, AeroPortalType type) {}
 
-    public static boolean any(ServerLevel level, AABB aabb) {
+    public static boolean anyTouching(ServerLevel level, SubLevel sub) {
         PortalScanPlan plan = AeroPortalsApi.scanPlan();
-        return !plan.isEmpty() && find(level, aabb, plan) != null;
+        return !plan.isEmpty() && findTouching(level, sub, AabbUtil.worldAabb(sub).inflate(1.0), plan) != null;
+    }
+
+    public static Hit findTouching(ServerLevel level, SubLevel sub, AABB searchArea, PortalScanPlan plan) {
+        return find(level, searchArea, plan, pos -> touches(level, sub, pos));
     }
 
     public static Hit find(ServerLevel level, AABB aabb, PortalScanPlan plan) {
+        return find(level, aabb, plan, pos -> true);
+    }
+
+    private static boolean touches(ServerLevel level, SubLevel sub, BlockPos portal) {
+        Vec3 local = sub.logicalPose().transformPositionInverse(Vec3.atCenterOf(portal));
+        BoundingBox3ic plot = sub.getPlot().getBoundingBox();
+        BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
+        for (int x = Mth.floor(local.x - CONTACT_REACH); x <= Mth.floor(local.x + CONTACT_REACH); x++) {
+            if (Math.abs(x + 0.5 - local.x) > CONTACT_REACH) continue;
+            for (int y = Mth.floor(local.y - CONTACT_REACH); y <= Mth.floor(local.y + CONTACT_REACH); y++) {
+                if (Math.abs(y + 0.5 - local.y) > CONTACT_REACH) continue;
+                for (int z = Mth.floor(local.z - CONTACT_REACH); z <= Mth.floor(local.z + CONTACT_REACH); z++) {
+                    if (Math.abs(z + 0.5 - local.z) > CONTACT_REACH) continue;
+                    if (!plot.contains(x, y, z)) continue;
+                    if (!level.getBlockState(cursor.set(x, y, z)).isAir()) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static Hit find(ServerLevel level, AABB aabb, PortalScanPlan plan, Predicate<BlockPos> accept) {
         int x0 = Mth.floor(aabb.minX);
         int x1 = Mth.floor(aabb.maxX);
         int z0 = Mth.floor(aabb.minZ);
@@ -62,7 +93,9 @@ public final class PortalBlockSearch {
                             for (int z = minZ; z <= maxZ; z++) {
                                 BlockState state = section.getBlockState(x & 15, y & 15, z & 15);
                                 AeroPortalType type = plan.match(state);
-                                if (type != null) return new Hit(new BlockPos(x, y, z), type);
+                                if (type == null) continue;
+                                BlockPos pos = new BlockPos(x, y, z);
+                                if (accept.test(pos)) return new Hit(pos, type);
                             }
                         }
                     }
