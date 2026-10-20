@@ -36,7 +36,7 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 - **Roped ships travel as a set** (when [Create: Simulated](https://www.curseforge.com/minecraft/mc-mods/create-aeronautics) is installed). Fly one of a pair of roped ships into a portal and its partner comes through with it, still on the rope, however far apart they are. The rope keeps its length and stays attached to the same connectors on both ships.
 
-- **Control links stay connected.** Drive By Wire connections and Gadgets & Gizmos contraption links move with their ships. Cross-dimension travel is rejected if a link has an endpoint outside the travelling group, keeping that connection intact.
+- **Control links stay connected.** Drive By Wire and Drive-By-Sable cable connections and Gadgets & Gizmos contraption links move with their ships. Cross-dimension travel is rejected if a link has an endpoint outside the travelling group, keeping that connection intact.
 
 - **Dimension stacking** (when [Stackable Planar Dimensions](https://www.curseforge.com/minecraft/mc-mods/stackable-planar-dimensions) or [Forgiving World](https://www.curseforge.com/minecraft/mc-mods/forgiving-world) is installed). Fly your airship down through the floor or up past the ceiling of a stacked dimension and the whole ship crosses into the adjoining dimension with everyone aboard, using the stack layout, heights, and coordinate scaling from that mod's config.
 
