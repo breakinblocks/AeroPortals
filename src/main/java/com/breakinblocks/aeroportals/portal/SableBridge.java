@@ -12,7 +12,6 @@ import dev.ryanhcode.sable.companion.math.BoundingBox3i;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.companion.math.Pose3d;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
-import dev.ryanhcode.sable.sublevel.storage.SubLevelRemovalReason;
 import dev.ryanhcode.sable.sublevel.storage.serialization.SubLevelData;
 import dev.ryanhcode.sable.sublevel.storage.serialization.SubLevelSerializer;
 import dev.ryanhcode.sable.sublevel.system.SubLevelPhysicsSystem;
@@ -36,6 +35,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -99,7 +99,8 @@ public final class SableBridge {
         List<UUID> ids = group.stream().map(ServerSubLevel::getUniqueId).toList();
         List<Prepared> prepared = new ArrayList<>();
         Map<UUID, Moved> moved = new LinkedHashMap<>();
-        Set<UUID> journalsWritten = new java.util.HashSet<>();
+        Set<UUID> journalsWritten = new HashSet<>();
+        Set<UUID> removalAttempted = new HashSet<>();
         boolean removed = false;
         boolean preparationRollbackComplete = true;
         try {
@@ -155,7 +156,10 @@ public final class SableBridge {
                 journalsWritten.add(uuid);
             }
             removed = true;
-            for (ServerSubLevel sub : group) src.removeSubLevel(sub, SubLevelRemovalReason.REMOVED);
+            for (ServerSubLevel sub : group) {
+                removalAttempted.add(sub.getUniqueId());
+                TransferRemovalScope.remove(src, sub);
+            }
             for (Prepared item : prepared) {
                 Loaded loaded = reloadInDestination(item.sourceInfo(), destination, dst, item.destination());
                 if (loaded == null) throw new IllegalStateException("Destination rejected " + item.destination().uuid());
@@ -199,7 +203,7 @@ public final class SableBridge {
             }
             for (ServerSubLevel loaded : partialDestination) {
                 try {
-                    dst.removeSubLevel(loaded, SubLevelRemovalReason.REMOVED);
+                    TransferRemovalScope.remove(dst, loaded);
                 } catch (RuntimeException cleanupError) {
                     rollbackComplete = false;
                     AeroPortals.LOGGER.error("[AeroPortals] could not remove partial destination ship {}; continuing group rollback",
@@ -209,13 +213,16 @@ public final class SableBridge {
             Map<UUID, Loaded> restored = new LinkedHashMap<>();
             for (Prepared item : prepared) {
                 ServerSubLevel original = item.request().sub();
-                if (!original.isRemoved() && src.getSubLevel(original.getUniqueId()) == original) {
+                // Sable unregisters physics before unloading blocks, but marks removal afterwards.
+                // A source whose removal was attempted cannot be assumed intact from its flags.
+                if (!removalAttempted.contains(original.getUniqueId()) && !original.isRemoved()
+                        && src.getSubLevel(original.getUniqueId()) == original) {
                     restored.put(original.getUniqueId(), new Loaded(original, BlockPos.ZERO));
                     continue;
                 }
                 try {
                     if (src.getSubLevel(original.getUniqueId()) != null) {
-                        throw new IllegalStateException("A partial destination with this UUID still occupies the source container");
+                        throw new IllegalStateException("A partially removed ship with this UUID still occupies the source container");
                     }
                     Loaded result = reloadInDestination(new SourceInfo(source.dimension(), source.getMinBuildHeight(), Vec3.ZERO,
                             item.sourceInfo().regionMin(), item.sourceInfo().regionBlocks()), source, src,

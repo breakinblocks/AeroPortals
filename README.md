@@ -12,7 +12,7 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 - **Nether portals** Fly your airship into a nether portal and you and the ship arrive on the other side. Wide ship? Build a wide portal. AeroPortals matches the source portal's dimensions at the destination and generates one if needed. The linking portal is always placed inside the playable layer of the Nether, never on top of the bedrock roof, even if your source portal was at a high Y in the Overworld.
 
-- **End portals** Sail onto an end portal and the ship lands at the vanilla End spawn point. The 5x5 obsidian spawn pad is rebuilt if missing. Travelling back from the End drops you near world spawn.
+- **End portals** Sail onto a vanilla End portal or Irregular Implements' artificial End portal and the ship lands at the vanilla End spawn point. The 5x5 obsidian spawn pad is rebuilt if missing. Travelling back from the End drops you near world spawn.
 
 - **Onboard portal jump drives** (off by default; enable `onboard_portal_jumps` in the server config). Build a nether portal into your ship and light it mid-flight: after a short countdown the whole ship jumps to the other dimension, portal and all. A matching portal is linked or built beside your arrival unless `onboard_generate_destination_portal` is disabled; then the jump uses scaled coordinates and a clear landing spot. Failed jumps tell nearby riders and retry while the portal stays lit. Break or extinguish the portal to abort, and re-light it after a successful jump to charge again.
 

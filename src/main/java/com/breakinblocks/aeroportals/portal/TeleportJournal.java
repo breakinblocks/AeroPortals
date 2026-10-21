@@ -7,7 +7,6 @@ import com.breakinblocks.aeroportals.api.TransferCarrier;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
-import dev.ryanhcode.sable.sublevel.storage.SubLevelRemovalReason;
 import dev.ryanhcode.sable.sublevel.storage.holding.GlobalSavedSubLevelPointer;
 import dev.ryanhcode.sable.sublevel.storage.serialization.SubLevelData;
 import dev.ryanhcode.sable.sublevel.storage.serialization.SubLevelSerializer;
@@ -281,7 +280,7 @@ public final class TeleportJournal {
         for (ServerSubLevel sub : copies) {
             if (sub == null || sub.isRemoved()) continue;
             try {
-                SubLevelContainer.getContainer(level).removeSubLevel(sub, SubLevelRemovalReason.REMOVED);
+                TransferRemovalScope.remove(SubLevelContainer.getContainer(level), sub);
             } catch (RuntimeException ex) {
                 if (failure == null) failure = new IOException("Could not retire all opposite ship copies");
                 failure.addSuppressed(ex);

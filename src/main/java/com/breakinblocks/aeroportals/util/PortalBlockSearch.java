@@ -3,6 +3,7 @@ package com.breakinblocks.aeroportals.util;
 import com.breakinblocks.aeroportals.api.AeroPortalType;
 import com.breakinblocks.aeroportals.api.AeroPortalsApi;
 import com.breakinblocks.aeroportals.api.PortalScanPlan;
+import com.breakinblocks.aeroportals.compat.IrregularImplementsCompat;
 import dev.ryanhcode.sable.companion.math.BoundingBox3ic;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.core.BlockPos;
@@ -26,7 +27,9 @@ public final class PortalBlockSearch {
 
     public static boolean anyTouching(ServerLevel level, SubLevel sub) {
         PortalScanPlan plan = AeroPortalsApi.scanPlan();
-        return !plan.isEmpty() && findTouching(level, sub, AabbUtil.worldAabb(sub).inflate(1.0), plan) != null;
+        AABB area = AabbUtil.worldAabb(sub).inflate(1.0);
+        return (!plan.isEmpty() && findTouching(level, sub, area, plan) != null)
+                || IrregularImplementsCompat.findTouching(level, sub, area) != null;
     }
 
     public static Hit findTouching(ServerLevel level, SubLevel sub, AABB searchArea, PortalScanPlan plan) {
@@ -37,7 +40,7 @@ public final class PortalBlockSearch {
         return find(level, aabb, plan, pos -> true);
     }
 
-    private static boolean touches(ServerLevel level, SubLevel sub, BlockPos portal) {
+    public static boolean touches(ServerLevel level, SubLevel sub, BlockPos portal) {
         Vec3 local = sub.logicalPose().transformPositionInverse(Vec3.atCenterOf(portal));
         BoundingBox3ic plot = sub.getPlot().getBoundingBox();
         BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();

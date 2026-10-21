@@ -5,12 +5,15 @@ import com.breakinblocks.aeroportals.api.AeroPortalsApi;
 import com.breakinblocks.aeroportals.api.PortalDestination;
 import com.breakinblocks.aeroportals.api.PortalScanPlan;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
+import com.breakinblocks.aeroportals.compat.IrregularImplementsCompat;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import com.breakinblocks.aeroportals.util.PortalBlockSearch;
 import dev.ryanhcode.sable.api.sublevel.ServerSubLevelContainer;
 import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
 
 import java.util.List;
@@ -46,6 +49,13 @@ public final class PortalDetector {
             }
 
             PortalBlockSearch.Hit hit = PortalBlockSearch.findTouching(level, sub, aabb, plan);
+            if (hit == null) {
+                BlockPos artificialPortal = IrregularImplementsCompat.findTouching(level, sub, aabb);
+                if (artificialPortal != null) {
+                    var endType = plan.match(Blocks.END_PORTAL.defaultBlockState());
+                    if (endType != null) hit = new PortalBlockSearch.Hit(artificialPortal, endType);
+                }
+            }
             if (hit == null) {
                 PortalCooldown.noteAwayFromPortal(id, aabb.getCenter());
                 continue;
