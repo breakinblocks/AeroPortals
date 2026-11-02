@@ -10,6 +10,7 @@ import com.breakinblocks.aeroportals.compat.CreateEnderGatewayCompat;
 import com.breakinblocks.aeroportals.compat.CreateTeleportersCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
+import com.breakinblocks.aeroportals.compat.TwilightForestCompat;
 import com.breakinblocks.aeroportals.util.PortalGeom;
 import com.breakinblocks.aeroportals.util.PortalRect;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
@@ -43,6 +44,8 @@ public final class BuiltinPortalTypes {
                 DeeperAndDarkerCompat::portalBlock, PortalTeleport::resolveDeeperDarker));
         AeroPortalsApi.registerPortal(points("create_teleporters", CreateTeleportersCompat::portalBlocks,
                 CreateTeleportersCompat::isPortalBlock, PortalTeleport::resolveCreateTeleporters));
+        AeroPortalsApi.registerPortal(point("twilight_forest", TwilightForestCompat::portalBlock,
+                TwilightForestCompat::isPortalBlock, PortalTeleport::resolveTwilight));
         AeroPortalsApi.registerPortal(new EnderGatewayType());
     }
 

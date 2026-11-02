@@ -90,6 +90,12 @@ AeroPortalsApi.registerPortal(new MyPortalType());
 Use `PortalDestination.of(level, pos, false, label)` to skip landing validation when you already know
 the space is clear.
 
+A ship keeps its momentum through the trip unless the server sets `clear_velocity_on_arrival`. Call
+`withExitVelocity(transform)` on the destination to reshape that momentum for your portal. The
+transform receives the ship's world-space velocity on arrival and returns the velocity it should
+leave with. `PortalDestination.UPWARD_EXIT` turns a downward velocity into the same speed upward,
+which suits a portal the ship sinks into from above.
+
 `priority()` decides which type wins when two match the same block state (higher first, default 0).
 `isEnabled()` is checked once per scan, so you can gate a type behind your own config. Server
 owners can also switch your type off by adding its id to `travel_methods.disabled` in

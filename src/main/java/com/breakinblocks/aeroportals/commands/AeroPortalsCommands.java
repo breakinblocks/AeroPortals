@@ -10,6 +10,7 @@ import com.breakinblocks.aeroportals.compat.ForgivingWorldCompat;
 import com.breakinblocks.aeroportals.compat.SpdStackCompat;
 import com.breakinblocks.aeroportals.compat.TelepastriesCompat;
 import com.breakinblocks.aeroportals.compat.TropicraftCompat;
+import com.breakinblocks.aeroportals.compat.TwilightForestCompat;
 import com.breakinblocks.aeroportals.config.TravelMethods;
 import com.breakinblocks.aeroportals.portal.EndPortalLanding;
 import com.breakinblocks.aeroportals.portal.PortalTeleport;
@@ -103,6 +104,7 @@ public final class AeroPortalsCommands {
         if (AetherCompat.isAvailable()) dests.add("aether");
         if (TropicraftCompat.isAvailable()) dests.add("tropicraft");
         if (DeeperAndDarkerCompat.isAvailable()) dests.add("otherside");
+        if (TwilightForestCompat.isAvailable()) dests.add("twilight_forest");
         return dests.toArray(new String[0]);
     }
 
@@ -280,6 +282,7 @@ public final class AeroPortalsCommands {
             case "aether" -> AetherCompat.isAvailable() ? AetherCompat.destinationDimension() : null;
             case "tropicraft", "tropics" -> TropicraftCompat.isAvailable() ? TropicraftCompat.tropicsDimension() : null;
             case "otherside", "deeperdarker" -> DeeperAndDarkerCompat.isAvailable() ? DeeperAndDarkerCompat.destinationDimension() : null;
+            case "twilight_forest", "twilight" -> TwilightForestCompat.isAvailable() ? TwilightForestCompat.DIMENSION : null;
             default -> {
                 try {
                     ResourceLocation rl = ResourceLocation.parse(arg);

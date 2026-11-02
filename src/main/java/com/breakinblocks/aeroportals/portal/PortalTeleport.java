@@ -12,6 +12,7 @@ import com.breakinblocks.aeroportals.compat.CreateTeleportersCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
 import com.breakinblocks.aeroportals.compat.SimulatedRopeCompat;
+import com.breakinblocks.aeroportals.compat.TwilightForestCompat;
 import com.breakinblocks.aeroportals.config.AeroPortalsConfig;
 import com.breakinblocks.aeroportals.util.AabbUtil;
 import com.breakinblocks.aeroportals.util.PortalBuilder;
@@ -54,6 +55,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import org.joml.Vector3d;
 import org.joml.Vector3dc;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
@@ -69,12 +71,14 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.UnaryOperator;
 
 public final class PortalTeleport {
     private static final int DEST_CHUNK_RADIUS = 2;
     private static final int VANILLA_PORTAL_COOLDOWN_OVERRIDE = 300;
     private static final double MAX_RIDER_OFFSET_SQR = 1024.0 * 1024.0;
     private static final double RIDER_REACQUIRE_MARGIN = 1.0;
+    private static final int MAX_TWILIGHT_POOL_BLOCKS = 4096;
 
 
     private PortalTeleport() {}
@@ -87,7 +91,7 @@ public final class PortalTeleport {
         if (destination == null) return false;
         if (destination.construction() != null && !destination.construction().canBuild(destination.level())) return false;
         boolean moved = executeChainMove(srcLevel, sub, destination.level(), destination.subWorldPos(),
-                destination.validateLanding(), destination.label());
+                destination.validateLanding(), destination.label(), false, destination.exitVelocity());
         if (moved && destination.construction() != null && destination.construction().build(destination.level()) == null) {
             AeroPortals.LOGGER.warn("[AeroPortals] ship arrived but destination portal construction was blocked");
         }
@@ -442,6 +446,85 @@ public final class PortalTeleport {
         return PortalDestination.of(dstLevel, dstWorld, true, "draconic");
     }
 
+    public static PortalDestination resolveTwilight(ServerLevel srcLevel, ServerSubLevel sub, BlockPos srcPortalBlock) {
+        for (ServerPlayer rider : ridersOfChain(srcLevel, transferGroup(srcLevel, sub))) {
+            if (TwilightForestCompat.isLockedOutOfPortal(rider)) {
+                rider.displayClientMessage(TwilightForestCompat.UNWORTHY, true);
+                AeroPortals.LOGGER.debug("[AeroPortals] twilight teleport: rider {} has not unlocked the Twilight portal; ship stays",
+                        rider.getGameProfile().getName());
+                return null;
+            }
+        }
+
+        DimensionTransition transition = TwilightForestCompat.destination(srcLevel, srcPortalBlock);
+        if (transition == null) {
+            AeroPortals.LOGGER.warn("[AeroPortals] twilight teleport: Twilight Forest gave no destination for the portal at {}; aborting",
+                    srcPortalBlock);
+            return null;
+        }
+        ServerLevel dstLevel = transition.newLevel();
+        BlockPos exit = BlockPos.containing(transition.pos());
+        ensureChunksLoaded(dstLevel, exit);
+        Vec3 dstWorld = clampToWorldBorder(dstLevel, twilightLanding(dstLevel, sub, transition.pos()));
+
+        AeroPortals.LOGGER.debug("[AeroPortals] twilight teleport: src dim={} portalBlock={} -> dst dim={} exit={} landing={}",
+                srcLevel.dimension().location(), srcPortalBlock, dstLevel.dimension().location(), transition.pos(), dstWorld);
+
+        return PortalDestination.of(dstLevel, dstWorld, true, "twilight_forest")
+                .withExitVelocity(PortalDestination.UPWARD_EXIT);
+    }
+
+    private static Vec3 twilightLanding(ServerLevel level, ServerSubLevel sub, Vec3 exit) {
+        BlockPos exitPos = BlockPos.containing(exit);
+        BlockPos pool = null;
+        double best = Double.MAX_VALUE;
+        for (BlockPos pos : BlockPos.betweenClosed(exitPos.offset(-2, -2, -2), exitPos.offset(2, 0, 2))) {
+            if (!TwilightForestCompat.isAnyPortalBlock(level.getBlockState(pos))) continue;
+            double distance = pos.distSqr(exitPos);
+            if (distance < best) {
+                best = distance;
+                pool = pos.immutable();
+            }
+        }
+
+        double centreX = exit.x;
+        double centreZ = exit.z;
+        double bottomY = exit.y;
+        if (pool != null) {
+            int minX = pool.getX();
+            int maxX = pool.getX();
+            int minZ = pool.getZ();
+            int maxZ = pool.getZ();
+            Set<BlockPos> seen = new HashSet<>();
+            ArrayDeque<BlockPos> queue = new ArrayDeque<>();
+            seen.add(pool);
+            queue.add(pool);
+            while (!queue.isEmpty() && seen.size() < MAX_TWILIGHT_POOL_BLOCKS) {
+                BlockPos pos = queue.poll();
+                minX = Math.min(minX, pos.getX());
+                maxX = Math.max(maxX, pos.getX());
+                minZ = Math.min(minZ, pos.getZ());
+                maxZ = Math.max(maxZ, pos.getZ());
+                for (Direction direction : Direction.Plane.HORIZONTAL) {
+                    BlockPos next = pos.relative(direction);
+                    if (!seen.contains(next) && TwilightForestCompat.isAnyPortalBlock(level.getBlockState(next))) {
+                        seen.add(next);
+                        queue.add(next);
+                    }
+                }
+            }
+            centreX = (minX + maxX + 1) / 2.0;
+            centreZ = (minZ + maxZ + 1) / 2.0;
+            bottomY = pool.getY() + 1;
+        }
+
+        AABB aabb = AabbUtil.worldAabb(sub);
+        Vec3 subPos = subWorldPos(sub.logicalPose());
+        Vec3 aabbCentre = aabb.getCenter();
+        return new Vec3(centreX + (subPos.x - aabbCentre.x), bottomY + (subPos.y - aabb.minY),
+                centreZ + (subPos.z - aabbCentre.z));
+    }
+
     public static PortalDestination resolveEnderGateway(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect, BlockPos hitPos) {
         MinecraftServer server = srcLevel.getServer();
         ResourceKey<Level> dstKey = (srcLevel.dimension() == Level.END) ? Level.OVERWORLD : Level.END;
@@ -593,7 +676,7 @@ public final class PortalTeleport {
     }
 
     public static boolean teleportSpatial(ServerLevel source, ServerSubLevel sub, ServerLevel destination, Vec3 position, String label) {
-        return executeChainMove(source, sub, destination, position, false, label, true);
+        return executeChainMove(source, sub, destination, position, false, label, true, null);
     }
 
     private static boolean executeChainMove(
@@ -603,12 +686,12 @@ public final class PortalTeleport {
             Vec3 dstWorld,
             boolean validateLanding,
             String contextLabel) {
-        return executeChainMove(srcLevel, sub, dstLevel, dstWorld, validateLanding, contextLabel, false);
+        return executeChainMove(srcLevel, sub, dstLevel, dstWorld, validateLanding, contextLabel, false, null);
     }
 
     private static boolean executeChainMove(ServerLevel srcLevel, ServerSubLevel sub, ServerLevel dstLevel,
                                             Vec3 dstWorld, boolean validateLanding, String contextLabel,
-                                            boolean bypassPortalCooldown) {
+                                            boolean bypassPortalCooldown, UnaryOperator<Vec3> exitVelocity) {
         MinecraftServer server = srcLevel.getServer();
         Vec3 srcWorld = subWorldPos(sub.logicalPose());
 
@@ -738,7 +821,7 @@ public final class PortalTeleport {
             if (AeroPortalsConfig.CLEAR_VELOCITY_ON_ARRIVAL.get()) {
                 forceClientSync(dstLevel, newSub, true);
             } else {
-                DeferredVelocityRestores.holdStill(server.getTickCount(), dstLevel, newSub);
+                DeferredVelocityRestores.holdStill(server.getTickCount(), dstLevel, newSub, exitVelocity);
                 forceClientSync(dstLevel, newSub, false);
             }
 
@@ -849,13 +932,17 @@ public final class PortalTeleport {
         private record Pending(long targetTick, ServerLevel level, ServerSubLevel sub,
                                Vector3dc linear, Vector3dc angular) {}
 
-        public static void holdStill(long currentTick, ServerLevel level, ServerSubLevel sub) {
+        public static void holdStill(long currentTick, ServerLevel level, ServerSubLevel sub, UnaryOperator<Vec3> exitVelocity) {
             ServerSubLevelContainer container = SubLevelContainer.getContainer(level);
             if (container == null) return;
             PhysicsPipeline pipeline = container.physicsSystem().getPipeline();
             Vector3d linear = pipeline.getLinearVelocity(sub, new Vector3d());
             Vector3d angular = pipeline.getAngularVelocity(sub, new Vector3d());
             pipeline.resetVelocity(sub);
+            if (exitVelocity != null) {
+                Vec3 shaped = exitVelocity.apply(new Vec3(linear.x, linear.y, linear.z));
+                if (shaped != null) linear.set(shaped.x, shaped.y, shaped.z);
+            }
             if (linear.lengthSquared() < MIN_RESTORE_SQR && angular.lengthSquared() < MIN_RESTORE_SQR) return;
             pending.add(new Pending(currentTick + HOLD_TICKS, level, sub, linear, angular));
             heldCount.incrementAndGet();
