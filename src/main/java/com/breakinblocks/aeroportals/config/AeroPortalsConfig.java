@@ -82,7 +82,7 @@ public final class AeroPortalsConfig {
         builder.push("travel_methods");
         DISABLED_TRAVEL_METHODS = builder
                 .comment("Ways of travelling that AeroPortals will ignore. Anything listed here is left alone: the portal, drink, or cake still works for players on foot, it just no longer carries airships.",
-                        "Built-in ids: nether, end, aether, ars_nouveau, draconic, deeper_darker, create_teleporters, twilight_forest, ender_gateway, pina_colada, telepastries, ae2_spatial, dimension_stack, kubejs",
+                        "Built-in ids: nether, end, aether, ars_nouveau, draconic, deeper_darker, deep_waters, create_teleporters, twilight_forest, ender_gateway, pina_colada, telepastries, ae2_spatial, dimension_stack, kubejs",
                         "Ids added by other mods or by KubeJS scripts can be listed too. Run /aeroportals methods in game to see every id and whether it is on.",
                         "Example: [\"nether\", \"end\"] stops airships travelling through vanilla portals while leaving every modded portal working.",
                         "Listing 'nether' also switches off onboard portal jump drives.")

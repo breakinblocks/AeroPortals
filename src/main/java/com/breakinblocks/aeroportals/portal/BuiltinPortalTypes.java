@@ -9,6 +9,7 @@ import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
 import com.breakinblocks.aeroportals.compat.CreateEnderGatewayCompat;
 import com.breakinblocks.aeroportals.compat.CreateTeleportersCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
+import com.breakinblocks.aeroportals.compat.DeepWatersCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
 import com.breakinblocks.aeroportals.compat.TwilightForestCompat;
 import com.breakinblocks.aeroportals.util.PortalGeom;
@@ -42,6 +43,8 @@ public final class BuiltinPortalTypes {
                 DraconicEvolutionCompat::isPortalBlock, PortalTeleport::resolveDraconic));
         AeroPortalsApi.registerPortal(rect("deeper_darker", DeeperAndDarkerCompat::isPortalBlock,
                 DeeperAndDarkerCompat::portalBlock, PortalTeleport::resolveDeeperDarker));
+        AeroPortalsApi.registerPortal(rect("deep_waters", DeepWatersCompat::isPortalBlock,
+                DeepWatersCompat::portalBlock, PortalTeleport::resolveDeepWaters));
         AeroPortalsApi.registerPortal(points("create_teleporters", CreateTeleportersCompat::portalBlocks,
                 CreateTeleportersCompat::isPortalBlock, PortalTeleport::resolveCreateTeleporters));
         AeroPortalsApi.registerPortal(point("twilight_forest", TwilightForestCompat::portalBlock,

@@ -154,6 +154,7 @@ dependencies {
 	localRuntime("maven.modrinth:tropicraft:9.8.1-1.21.1") { transitive = false }
 
 	localRuntime("curse.maven:the-twilight-forest-227639:7797302") { transitive = false }
+	localRuntime("curse.maven:elliemores-deep-waters-1204184:8314952") { transitive = false }
 
 	localRuntime("com.brandon3055.draconicevolution:Draconic-Evolution:1.21.1-3.1.4.632") { transitive = false }
 	localRuntime("com.brandon3055.brandonscore:BrandonsCore:1.21.1-3.2.1.309") { transitive = false }
@@ -228,8 +229,14 @@ tasks.register('cleanGameTestWorld', Delete) {
 	delete "run-gametest/world"
 }
 
-tasks.named('runGameTestServer').configure {
+tasks.register('copyGameTestDatapacks', Copy) {
 	dependsOn 'cleanGameTestWorld'
+	from 'src/gametest/datapacks'
+	into 'run-gametest/world/datapacks'
+}
+
+tasks.named('runGameTestServer').configure {
+	dependsOn 'copyGameTestDatapacks'
 	dependsOn 'copyGameTestStructures'
 	dependsOn 'copyGameTestKubeScripts'
 }

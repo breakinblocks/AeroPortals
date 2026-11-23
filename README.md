@@ -26,6 +26,8 @@ Sail your [Create: Aeronautics](https://www.curseforge.com/minecraft/mc-mods/cre
 
 - **Deeper and Darker portals** (when [Deeper and Darker](https://www.curseforge.com/minecraft/mc-mods/deeperdarker) is installed). Same idea as nether portals but with reinforced deepslate frames, leading to The Otherside.
 
+- **Deep Waters portals** (when [Elliemore's Deep Waters](https://www.curseforge.com/minecraft/mc-mods/elliemores-deep-waters) is installed). Fly or sail through a lit cobbled deepslate portal to the underwater dimension. AeroPortals links a matching exit or builds one if portal generation is enabled. The same portals carry ships back to the Overworld.
+
 - **Twilight Forest portals** (when [The Twilight Forest](https://www.curseforge.com/minecraft/mc-mods/the-twilight-forest) is installed). Lower your ship onto a lit portal pool until the hull touches it. The ship comes out over the linked pool on the other side, the same one a player walking through would reach, and a ship that dives in comes back out climbing instead of falling. One-way return pools carry nobody, and if the Twilight Forest config locks the portal behind an advancement, a ship with anyone aboard who has not earned it stays put.
 
 - **Pina colada teleport** (when [Tropicraft](https://www.curseforge.com/minecraft/mc-mods/tropicraft) is installed). Drink a pina colada while sailing your airship and you and the ship travel to the Tropics. Drink another in the Tropics to come home.
@@ -119,6 +121,7 @@ Brings the airship with that id to where you are standing. Use it when a ship ha
 | [Tropicraft](https://www.curseforge.com/minecraft/mc-mods/tropicraft) | 9.8+ | optional |
 | [Draconic Evolution](https://www.curseforge.com/minecraft/mc-mods/draconic-evolution) | 3.1+ | optional |
 | [Deeper and Darker](https://www.curseforge.com/minecraft/mc-mods/deeperdarker) | 1.3+ | optional |
+| [Elliemore's Deep Waters](https://www.curseforge.com/minecraft/mc-mods/elliemores-deep-waters) | 26.01 | optional |
 | [The Twilight Forest](https://www.curseforge.com/minecraft/mc-mods/the-twilight-forest) | 4.8+ | optional |
 | [Applied Energistics 2](https://www.curseforge.com/minecraft/mc-mods/applied-energistics-2) | 19.2+ | optional |
 | [Stackable Planar Dimensions](https://www.curseforge.com/minecraft/mc-mods/stackable-planar-dimensions) | 1.9+ | optional |
@@ -166,6 +169,7 @@ Every way of travelling has an id, and listing an id in `travel_methods.disabled
 | `ars_nouveau` | Ars Nouveau warp portals |
 | `draconic` | Draconic Evolution portals |
 | `deeper_darker` | Deeper and Darker portals |
+| `deep_waters` | Elliemore's Deep Waters portals |
 | `create_teleporters` | Create: Teleporters portals |
 | `twilight_forest` | Twilight Forest portal pools |
 | `ender_gateway` | Create: Ender Gateway portals |
@@ -187,7 +191,7 @@ Unreadable entries or missing compatibility mods leave the recovery data intact 
 ## Known limitations
 
 - **Docking links have to be re-made by hand.** Docked ships travel together and stay in formation, and the connectors, springs, winches and swivel plates keep track of what they were attached to, but the magnetic lock itself is not re-engaged for you: re-dock once you arrive. Ropes do come through the trip attached (see below).
-- **Portals from mods we haven't covered aren't recognized on their own.** Mystcraft and friends do nothing by default. The supported travel methods today are vanilla nether and end portals, Aether, Ars Nouveau, Draconic Evolution, Deeper and Darker, Twilight Forest, Create: Teleporters, Create: Ender Gateway, TelePastries cakes, Tropicraft pina coladas, AE2 spatial storage, and dimension stacking (Stackable Planar Dimensions / Forgiving World). Anything else needs teaching: a pack can add a portal with a KubeJS script and a mod can add one through the API, both without waiting on us. See `docs/KUBEJS.md` and `docs/API.md`, or open an issue and we will look at adding it.
+- **Portals from mods we haven't covered aren't recognized on their own.** Mystcraft and friends do nothing by default. The supported travel methods today are vanilla nether and end portals, Aether, Ars Nouveau, Draconic Evolution, Deeper and Darker, Deep Waters, Twilight Forest, Create: Teleporters, Create: Ender Gateway, TelePastries cakes, Tropicraft pina coladas, AE2 spatial storage, and dimension stacking (Stackable Planar Dimensions / Forgiving World). Anything else needs teaching: a pack can add a portal with a KubeJS script and a mod can add one through the API, both without waiting on us. See `docs/KUBEJS.md` and `docs/API.md`, or open an issue and we will look at adding it.
 - **Speed slightly drops per teleport.** Each portal trip costs about 10% of your velocity (Sable's reload setting). Tune `sub_level_velocity_retained_on_load` in Sable's config if you want full preservation.
 
 ## Want support for another portal or dimension?

@@ -10,6 +10,7 @@ import com.breakinblocks.aeroportals.compat.ArsNouveauCompat;
 import com.breakinblocks.aeroportals.compat.CreateEnderGatewayCompat;
 import com.breakinblocks.aeroportals.compat.CreateTeleportersCompat;
 import com.breakinblocks.aeroportals.compat.DeeperAndDarkerCompat;
+import com.breakinblocks.aeroportals.compat.DeepWatersCompat;
 import com.breakinblocks.aeroportals.compat.DraconicEvolutionCompat;
 import com.breakinblocks.aeroportals.compat.SimulatedRopeCompat;
 import com.breakinblocks.aeroportals.compat.TwilightForestCompat;
@@ -71,6 +72,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BiFunction;
 import java.util.function.UnaryOperator;
 
 public final class PortalTeleport {
@@ -313,17 +315,26 @@ public final class PortalTeleport {
     }
 
     public static PortalDestination resolveDeeperDarker(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
-        MinecraftServer server = srcLevel.getServer();
         ResourceKey<Level> destKey = DeeperAndDarkerCompat.destinationDimension();
-        ResourceKey<Level> returnKey = DeeperAndDarkerCompat.returnDimension();
-        if (destKey == null || returnKey == null) {
-            AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker teleport: compat returned null dimension keys; aborting");
-            return null;
-        }
-        ResourceKey<Level> dstKey = srcLevel.dimension().equals(destKey) ? returnKey : destKey;
-        ServerLevel dstLevel = server.getLevel(dstKey);
+        if (destKey == null) return null;
+        return resolveFramedPortal(srcLevel, sub, srcRect, destKey, DeeperAndDarkerCompat.portalBlock(),
+                Blocks.REINFORCED_DEEPSLATE, DeeperAndDarkerCompat::findClosestPortalPosition, "deeperdarker");
+    }
+
+    public static PortalDestination resolveDeepWaters(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect) {
+        Block portal = DeepWatersCompat.portalBlock();
+        if (portal == null) return null;
+        return resolveFramedPortal(srcLevel, sub, srcRect, DeepWatersCompat.DIMENSION, portal,
+                Blocks.COBBLED_DEEPSLATE, DeepWatersCompat::findClosestPortalPosition, "deep_waters");
+    }
+
+    private static PortalDestination resolveFramedPortal(ServerLevel srcLevel, ServerSubLevel sub, PortalRect srcRect,
+            ResourceKey<Level> dimension, Block portal, Block frame,
+            BiFunction<ServerLevel, BlockPos, Optional<BlockPos>> findPortal, String label) {
+        ResourceKey<Level> dstKey = srcLevel.dimension().equals(dimension) ? Level.OVERWORLD : dimension;
+        ServerLevel dstLevel = srcLevel.getServer().getLevel(dstKey);
         if (dstLevel == null) {
-            AeroPortals.LOGGER.warn("[AeroPortals] deeperdarker destination dim {} not loaded; aborting", dstKey.location());
+            AeroPortals.LOGGER.warn("[AeroPortals] {} destination dim {} not loaded; aborting", label, dstKey.location());
             return null;
         }
 
@@ -342,31 +353,32 @@ public final class PortalTeleport {
         BlockPos searchCenter = BlockPos.containing(scaledPortalCenter);
         ensureChunksLoaded(dstLevel, searchCenter);
 
-        Block ddPortalBlock = DeeperAndDarkerCompat.portalBlock();
-        DestinationResolution resolved = resolveDeeperDarkerDestinationPortal(dstLevel, srcRect, searchCenter, ddPortalBlock);
+        DestinationResolution resolved = resolveFramedDestinationPortal(dstLevel, srcRect, searchCenter,
+                portal, frame, findPortal, label);
         if (resolved == null) {
-            AeroPortals.LOGGER.error("[AeroPortals] deeperdarker teleport: could not resolve destination portal; aborting");
+            AeroPortals.LOGGER.debug("[AeroPortals] {} teleport: could not resolve destination portal", label);
             return null;
         }
         PortalRect dstRect = resolved.rect();
         Vec3 dstPortalCenter = dstRect.centerWorld();
         Vec3 dstWorld = pushClearOfPortalPlane(sub, srcWorld, dstRect, dstPortalCenter.add(subOffsetFromPortal));
 
-        AeroPortals.LOGGER.debug("[AeroPortals] deeperdarker teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
-                srcLevel.dimension().location(), srcWorld, srcPortalCenter,
+        AeroPortals.LOGGER.debug("[AeroPortals] {} teleport: src dim={} subPos={} portalCenter={} -> dst dim={} portalCenter={} subPos={} (ratio={}, axis={} {}x{}, generated={})",
+                label, srcLevel.dimension().location(), srcWorld, srcPortalCenter,
                 dstKey.location(), dstPortalCenter, dstWorld,
                 ratio, dstRect.axis(), dstRect.width(), dstRect.height(), resolved.generated());
 
-        return PortalDestination.of(dstLevel, dstWorld, true, "deeperdarker").withConstruction(resolved.construction());
+        return PortalDestination.of(dstLevel, dstWorld, true, label).withConstruction(resolved.construction());
     }
 
-    private static DestinationResolution resolveDeeperDarkerDestinationPortal(
-            ServerLevel dstLevel, PortalRect srcRect, BlockPos searchCenter, Block ddPortalBlock) {
+    private static DestinationResolution resolveFramedDestinationPortal(
+            ServerLevel dstLevel, PortalRect srcRect, BlockPos searchCenter, Block portal, Block frame,
+            BiFunction<ServerLevel, BlockPos, Optional<BlockPos>> findPortal, String label) {
         int radius = AeroPortalsConfig.DEST_PORTAL_SEARCH_RADIUS.get();
         Optional<PortalRect> existing = Optional.empty();
         if (radius > 0) {
-            Optional<BlockPos> pos = DeeperAndDarkerCompat.findClosestPortalPosition(dstLevel, searchCenter);
-            existing = pos.map(p -> PortalGeom.measureFromBlock(dstLevel, p, ddPortalBlock));
+            existing = findPortal.apply(dstLevel, searchCenter)
+                    .map(p -> PortalGeom.measureFromBlock(dstLevel, p, portal));
         }
 
         if (existing.isPresent()) {
@@ -376,27 +388,27 @@ public final class PortalTeleport {
             boolean withinRadius = rect.minCorner().distSqr(searchCenter) <= (long) radius * radius;
 
             if (axisMatch && bigEnough && withinRadius) {
-                AeroPortals.LOGGER.debug("[AeroPortals] linking to existing deeperdarker portal at {} (axis={} {}x{})",
-                        rect.minCorner(), rect.axis(), rect.width(), rect.height());
+                AeroPortals.LOGGER.debug("[AeroPortals] linking to existing {} portal at {} (axis={} {}x{})",
+                        label, rect.minCorner(), rect.axis(), rect.width(), rect.height());
                 return new DestinationResolution(rect, false);
             }
-            AeroPortals.LOGGER.debug("[AeroPortals] existing deeperdarker portal at {} unsuitable (axisMatch={}, bigEnough={}, withinRadius={}); will generate",
-                    rect.minCorner(), axisMatch, bigEnough, withinRadius);
+            AeroPortals.LOGGER.debug("[AeroPortals] existing {} portal at {} unsuitable (axisMatch={}, bigEnough={}, withinRadius={}); will generate",
+                    label, rect.minCorner(), axisMatch, bigEnough, withinRadius);
         }
 
         if (!AeroPortalsConfig.GENERATE_MATCHING_PORTAL.get()) {
-            AeroPortals.LOGGER.warn("[AeroPortals] no suitable deeperdarker destination portal and generation disabled; cannot resolve");
+            AeroPortals.LOGGER.warn("[AeroPortals] no suitable {} destination portal and generation disabled; cannot resolve", label);
             return null;
         }
 
         BlockPos buildPos = chooseBuildOrigin(searchCenter, srcRect);
-        BlockState portalState = ddPortalBlock.defaultBlockState()
+        BlockState portalState = portal.defaultBlockState()
                 .setValue(BlockStateProperties.HORIZONTAL_AXIS, srcRect.axis());
-        AeroPortals.LOGGER.debug("[AeroPortals] generating matching deeperdarker portal at {} (axis={} {}x{})",
-                buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
+        AeroPortals.LOGGER.debug("[AeroPortals] generating matching {} portal at {} (axis={} {}x{})",
+                label, buildPos, srcRect.axis(), srcRect.width(), srcRect.height());
         PortalBuilder.Plan generated = PortalBuilder.plan(
                 dstLevel, buildPos, srcRect.axis(), srcRect.width(), srcRect.height(),
-                Blocks.REINFORCED_DEEPSLATE, portalState);
+                frame, portalState);
         return new DestinationResolution(generated.rect(), true, generated);
     }
 
@@ -1224,9 +1236,13 @@ public final class PortalTeleport {
     private static boolean isPortalRelated(ServerLevel level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         if (AeroPortalsApi.isPortalBlock(state)) return true;
-        if (!isPortalFrameMaterial(state)) return false;
+        boolean deepWatersFrame = state.is(Blocks.COBBLED_DEEPSLATE);
+        if (!deepWatersFrame && !isPortalFrameMaterial(state)) return false;
         for (Direction d : Direction.values()) {
-            if (AeroPortalsApi.isPortalBlock(level.getBlockState(pos.relative(d)))) return true;
+            BlockState neighbor = level.getBlockState(pos.relative(d));
+            if (deepWatersFrame ? DeepWatersCompat.isPortalBlock(neighbor) : AeroPortalsApi.isPortalBlock(neighbor)) {
+                return true;
+            }
         }
         return false;
     }
