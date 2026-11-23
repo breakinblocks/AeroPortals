@@ -56,12 +56,16 @@ public final class BalloonTransferGameTests {
                     helper.assertTrue(ship != null, "Balloon ship disappeared before the transfer");
                     before[0] = gas(ship);
                     helper.assertTrue(before[0] > 1.0, "Burner never filled the balloon in the source dimension: " + before[0]);
+                    double mass = ship.getSelfMassTracker().getMass();
+                    helper.assertTrue(mass > 0.0, "Balloon fixture must have physical mass");
                     for (BlockPos pos : BlockPos.betweenClosed(-12, 88, -12, 12, 112, 12)) {
                         dst.setBlock(pos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
                     }
                     PortalTeleport.teleportToDimension(src, ship, dst, new Vec3(0.5, 100.0, 0.5), false, "balloon-gas");
                     ServerSubLevel moved = (ServerSubLevel) SubLevelContainer.getContainer(dst).getSubLevel(id[0]);
                     helper.assertTrue(moved != null, "Balloon ship did not arrive in the Nether");
+                    helper.assertTrue(Math.abs(moved.getSelfMassTracker().getMass() - mass) < 0.001,
+                            "Balloon ship must retain its mass at arrival");
                     double after = gas(moved);
                     AeroPortals.LOGGER.info("[AeroPortals/test] balloon gas before={} after={}", before[0], after);
                     helper.assertTrue(after >= before[0] * 0.95,
@@ -73,11 +77,14 @@ public final class BalloonTransferGameTests {
     private static ServerSubLevel balloonShip(GameTestHelper helper) {
         Block burner = block("aeronautics:adjustable_burner");
         Block envelope = block("aeronautics:white_envelope");
+        Block skyboundAnchor = BuiltInRegistries.BLOCK.getOptional(ResourceLocation.parse("ftbskies2aerocompanion:skybound_anchor"))
+                .orElse(Blocks.STONE);
         List<BlockPos> blocks = new ArrayList<>();
         for (int x = 5; x <= 9; x++) {
             for (int z = 5; z <= 9; z++) {
                 boolean centre = x == 7 && z == 7;
-                place(helper, blocks, new BlockPos(x, 1, z), centre ? Blocks.REDSTONE_BLOCK : Blocks.STONE);
+                Block floor = centre ? Blocks.REDSTONE_BLOCK : x == 6 && z == 7 ? skyboundAnchor : Blocks.STONE;
+                place(helper, blocks, new BlockPos(x, 1, z), floor);
                 place(helper, blocks, new BlockPos(x, 7, z), envelope);
                 boolean wall = x == 5 || x == 9 || z == 5 || z == 9;
                 if (!wall) continue;
