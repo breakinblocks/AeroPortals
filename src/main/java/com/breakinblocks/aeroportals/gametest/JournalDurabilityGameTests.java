@@ -1,5 +1,6 @@
 package com.breakinblocks.aeroportals.gametest;
 
+import com.breakinblocks.aeroportals.portal.PortalTeleport;
 import com.breakinblocks.aeroportals.portal.SableBridge;
 import com.breakinblocks.aeroportals.portal.TeleportJournal;
 import com.breakinblocks.aeroportals.util.AabbUtil;
@@ -14,6 +15,7 @@ import dev.ryanhcode.sable.sublevel.storage.serialization.SubLevelSerializer;
 import dev.ryanhcode.sable.util.SableNBTUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
@@ -26,6 +28,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BarrelBlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.gametest.GameTestHolder;
@@ -41,6 +45,50 @@ import java.util.UUID;
 @PrefixGameTestTemplate(false)
 public final class JournalDurabilityGameTests {
     private JournalDurabilityGameTests() {}
+
+    @GameTest(batch = "journal_singleSnapshotPermitsRoundTrip", template = "empty", timeoutTicks = 200)
+    public static void journal_singleSnapshotPermitsRoundTrip(GameTestHelper helper) {
+        GameTestSupport.isolate(helper);
+        ServerLevel source = helper.getLevel();
+        ServerLevel destination = source.getServer().getLevel(Level.NETHER);
+        helper.assertTrue(destination != null, "Nether must be loaded");
+        ServerSubLevel ship = assemble(helper, new BlockPos(7, 4, 7));
+        UUID uuid = ship.getUniqueId();
+        var moved = SableBridge.moveGroup(source, destination,
+                List.of(new SableBridge.Request(ship, new Vec3(13000, 100, 13000))));
+        helper.assertTrue(moved.containsKey(uuid), "Ship must reach the destination");
+        ServerSubLevel arrived = moved.get(uuid).sub();
+        var bounds = arrived.getPlot().getBoundingBox();
+        BlockPos pos = new BlockPos(bounds.minX(), bounds.minY(), bounds.minZ());
+        BlockState barrel = Blocks.BARREL.defaultBlockState();
+        destination.setBlockAndUpdate(pos, barrel);
+        destination.setBlockEntity(new BarrelBlockEntity(pos, barrel) {
+            private int saveCount;
+
+            @Override
+            protected void saveAdditional(CompoundTag data, HolderLookup.Provider registries) {
+                super.saveAdditional(data, registries);
+                data.putInt("aeroportals_test_save", ++saveCount);
+            }
+        });
+
+        try {
+            helper.assertTrue(TeleportJournal.complete(source.getServer(), uuid, source, destination, arrived),
+                    "Completion must verify the snapshot Sable wrote even if a block entity serializes differently each time");
+            helper.assertFalse(Files.exists(journal(source, uuid)), "Completed trip must clear the pending file");
+            PortalTeleport.teleportToDimension(destination, arrived, source, new Vec3(13000, 100, 13000),
+                    false, "journal-round-trip");
+            helper.assertTrue(SubLevelContainer.getContainer(source).getSubLevel(uuid) != null,
+                    "The same ship must be able to return");
+            helper.assertFalse(Files.exists(journal(source, uuid)), "Return trip must clear its pending file");
+            TeleportJournal.replayPending(source.getServer());
+            helper.assertTrue(SubLevelContainer.getContainer(destination).getSubLevel(uuid) == null,
+                    "Recovery must leave a completed round trip alone");
+        } finally {
+            TeleportJournal.delete(source.getServer(), uuid);
+        }
+        helper.succeed();
+    }
 
     @GameTest(batch = "journal_malformedEntryRemainsRecoverable", template = "empty")
     public static void journal_malformedEntryRemainsRecoverable(GameTestHelper helper) throws IOException {

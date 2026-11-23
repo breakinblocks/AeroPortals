@@ -119,9 +119,11 @@ public final class TeleportJournal {
             }
             ServerLevel target = rollback ? source : destination;
             ServerLevel retired = rollback ? destination : source;
-            JournalStorage.saveAndFlush(target);
+            Map<UUID, CompoundTag> snapshots = JournalStorage.saveAndFlush(target, Set.copyOf(uuids));
             Map<UUID, GlobalSavedSubLevelPointer> pointers = new LinkedHashMap<>();
-            for (Entry entry : entries) pointers.put(entry.uuid(), JournalStorage.verifySaved(target, entry.uuid()));
+            for (Entry entry : entries) {
+                pointers.put(entry.uuid(), JournalStorage.verifySaved(target, entry.uuid(), snapshots.get(entry.uuid())));
+            }
             if (retired != target) JournalStorage.saveAndFlush(retired);
             for (Entry entry : entries) {
                 GlobalSavedSubLevelPointer survivor = pointers.get(entry.uuid());
@@ -233,8 +235,8 @@ public final class TeleportJournal {
                     rollback ? Vec3.ZERO : translation(entry.metadata()), shifts.get(entry.uuid()), plotMoves));
         }
         // Persist the chosen side before removing any surviving copy from the opposite side.
-        JournalStorage.saveAndFlush(target);
-        for (Entry entry : entries) JournalStorage.verifySaved(target, entry.uuid());
+        Map<UUID, CompoundTag> snapshots = JournalStorage.saveAndFlush(target, targets.keySet());
+        for (Entry entry : entries) JournalStorage.verifySaved(target, entry.uuid(), snapshots.get(entry.uuid()));
         if (retired != target) {
             discardRecordedCarriers(retired, discarded, entries);
             removeCopies(retired, discarded.values());

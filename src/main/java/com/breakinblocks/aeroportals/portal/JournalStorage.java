@@ -18,6 +18,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -28,14 +30,20 @@ final class JournalStorage {
     private JournalStorage() {}
 
     static void saveAndFlush(ServerLevel level) throws IOException {
-        // Carrier entities and mod SavedData are outside the Sable plot snapshot.
-        // Sable's ServerLevel.save mixin saves the holding map before vanilla chunk/entity data.
-        level.save(null, true, false);
-        var map = container(level).getHoldingChunkMap();
-        map.getStorage().flush();
+        saveAndFlush(level, Set.of());
     }
 
-    static GlobalSavedSubLevelPointer verifySaved(ServerLevel level, UUID uuid) throws IOException {
+    static Map<UUID, CompoundTag> saveAndFlush(ServerLevel level, Set<UUID> members) throws IOException {
+        // Carrier entities and mod SavedData are outside the Sable plot snapshot.
+        // Sable's ServerLevel.save mixin saves the holding map before vanilla chunk/entity data.
+        var storage = container(level).getHoldingChunkMap().getStorage();
+        Map<UUID, CompoundTag> snapshots = JournalSaveCapture.during(storage, members, () -> level.save(null, true, false));
+        storage.flush();
+        return snapshots;
+    }
+
+    static GlobalSavedSubLevelPointer verifySaved(ServerLevel level, UUID uuid, CompoundTag expected) throws IOException {
+        if (expected == null) throw new IOException("Sable did not save a snapshot for ship " + uuid);
         ServerSubLevelContainer container = container(level);
         ServerSubLevel sub = (ServerSubLevel) container.getSubLevel(uuid);
         if (sub == null || sub.isRemoved()) throw new IOException("Ship is not active for readback: " + uuid);
@@ -45,9 +53,7 @@ final class JournalStorage {
         if (disk == null || !disk.hasUUID("uuid") || !uuid.equals(disk.getUUID("uuid"))) {
             throw new IOException("Destination pointer does not contain ship " + uuid);
         }
-        SubLevelData stored = SubLevelSerializer.fromData(disk);
-        CompoundTag expected = SubLevelSerializer.toData(sub, stored.dependencies()).fullTag();
-        if (!disk.equals(expected)) throw new IOException("Stored ship does not match the live snapshot: " + uuid);
+        if (!disk.equals(expected)) throw new IOException("Stored ship does not match the snapshot sent to storage: " + uuid);
         CompoundTag chunk = readHoldingChunk(level, pointer.chunkPos());
         boolean indexed = false;
         if (chunk != null) {
